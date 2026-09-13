@@ -78,16 +78,17 @@ test.describe("Full training day workflow — Chest & Shoulder Day", () => {
     await page.getByTestId("add-exercise-button").click();
 
     // Modal should appear
-    await expect(page.getByTestId("add-exercise-modal")).toBeVisible();
+    const modal = page.getByTestId("add-exercise-modal");
+    await expect(modal).toBeVisible();
 
     // Fill exercise name
-    await page.getByTestId("add-exercise-name-input").fill("Cable Crossover");
+    await modal.getByTestId("add-exercise-name-input").fill("Cable Crossover");
 
-    // Fill shorthand
-    await page.getByTestId("shorthand-input").fill("12x15x3");
+    // Fill shorthand (scoped to modal to avoid matching exercise card inputs)
+    await modal.getByTestId("shorthand-input").fill("12x15x3");
 
     // Submit
-    await page.getByTestId("add-exercise-submit").click();
+    await modal.getByTestId("add-exercise-submit").click();
 
     // Ad-hoc exercise should appear in session
     await expect(page.getByText("Cable Crossover")).toBeVisible({ timeout: 3000 });

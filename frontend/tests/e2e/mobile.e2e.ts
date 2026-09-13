@@ -40,7 +40,7 @@ test.describe("Mobile viewport — Pixel 7 (412×915)", () => {
     await expect(page.locator('[data-testid^="exercise-card-"]').first()).toBeVisible();
 
     const input = page.getByTestId("shorthand-input").first();
-    await input.tap();
+    await input.click();
     await input.fill("20x12x3");
 
     await expect(page.getByTestId("shorthand-preview").first()).toBeVisible();
