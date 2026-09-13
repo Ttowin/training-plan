@@ -1,0 +1,23 @@
+{
+  "name": "gymmatrix",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace=backend\" \"npm run dev --workspace=frontend\"",
+    "build": "npm run build --workspace=frontend && npm run build --workspace=backend",
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "npm run test --workspace=backend",
+    "test:frontend": "npm run test --workspace=frontend",
+    "dev:e2e": "npm run db:migrate:local --workspace=backend && npm run db:seed:local --workspace=backend && npm run dev --workspace=backend",
+    "test:e2e": "npm run test:e2e --workspace=frontend",
+    "test:coverage": "npm run test:coverage --workspace=backend && npm run test:coverage --workspace=frontend",
+    "deploy": "npm run build && wrangler deploy --config backend/wrangler.toml"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}
