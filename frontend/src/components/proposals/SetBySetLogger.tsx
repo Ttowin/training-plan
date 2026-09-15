@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { formatNum, type LoggerProps } from "./types.js";
 
 interface SetRow {
@@ -13,10 +13,12 @@ export function SetBySetLogger({ exercise, lastWeek, onLog }: LoggerProps) {
   const startReps = lastWeek?.reps ?? exercise.reps_max ?? 12;
   const startCount = lastWeek?.sets ?? exercise.default_sets ?? 3;
 
-  let seq = 0;
-  const makeRow = (weight: number | null, reps: number): SetRow => ({ id: ++seq, weight, reps, done: false });
+  // Stable, monotonically increasing id counter (survives re-renders) so every
+  // added set gets a unique id — otherwise repeated "Add set" clicks collide.
+  const idRef = useRef(0);
+  const makeRow = (weight: number | null, reps: number): SetRow => ({ id: ++idRef.current, weight, reps, done: false });
 
-  const [rows, setRows] = useState<SetRow[]>(
+  const [rows, setRows] = useState<SetRow[]>(() =>
     Array.from({ length: startCount }, () => makeRow(lastWeek?.weight ?? startWeight, startReps))
   );
 
