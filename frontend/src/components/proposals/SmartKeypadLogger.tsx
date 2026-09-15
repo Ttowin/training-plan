@@ -10,14 +10,23 @@ export function SmartKeypadLogger({ lastWeek, onLog }: LoggerProps) {
   const [reps, setReps] = useState<string>(lastWeek?.reps ? String(lastWeek.reps) : "");
   const [sets, setSets] = useState<string>(lastWeek?.sets ? String(lastWeek.sets) : "");
   const [active, setActive] = useState<Seg>("weight");
+  // When a field is focused fresh, the first keypress replaces its prefilled value
+  // instead of appending, so you don't have to backspace last week's number.
+  const [fresh, setFresh] = useState<boolean>(true);
 
   const getters: Record<Seg, string> = { weight, reps, sets };
   const setters: Record<Seg, (v: string) => void> = { weight: setWeight, reps: setReps, sets: setSets };
 
+  function focus(s: Seg) {
+    setActive(s);
+    setFresh(true);
+  }
+
   function press(key: string) {
     if (active === "weight" && bw) return;
-    const cur = getters[active];
-    if (key === "." ) {
+    const cur = fresh ? "" : getters[active];
+    setFresh(false);
+    if (key === ".") {
       if (active !== "weight" || cur.includes(".")) return;
       setters[active](cur === "" ? "0." : cur + ".");
       return;
@@ -31,15 +40,17 @@ export function SmartKeypadLogger({ lastWeek, onLog }: LoggerProps) {
       setBw(false);
       return;
     }
+    setFresh(false);
     setters[active](getters[active].slice(0, -1));
   }
   function advance() {
     setActive((a) => (a === "weight" ? "reps" : a === "reps" ? "sets" : "weight"));
+    setFresh(true);
   }
   function toggleBw() {
     setBw((v) => !v);
     setWeight("");
-    setActive("weight");
+    focus("weight");
   }
 
   const wNum = bw ? null : parseFloat(weight);
@@ -64,7 +75,7 @@ export function SmartKeypadLogger({ lastWeek, onLog }: LoggerProps) {
 
   function Segment({ s, label, value }: { s: Seg; label: string; value: string }) {
     return (
-      <div className={segClass(s)} onClick={() => setActive(s)} data-testid={`pad-seg-${s}`}>
+      <div className={segClass(s)} onClick={() => focus(s)} data-testid={`pad-seg-${s}`}>
         <div className="text-[10px] font-terminal text-matrix-text-muted uppercase tracking-widest">{label}</div>
         <div className={`font-terminal text-2xl tabular-nums mt-1 ${value ? "text-matrix-green" : "text-matrix-text-muted"}`}>
           {value || "–"}
