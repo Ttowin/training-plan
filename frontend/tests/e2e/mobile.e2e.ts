@@ -21,30 +21,39 @@ test.describe("Mobile viewport — Pixel 7 (412×915)", () => {
     expect(box?.height).toBeGreaterThanOrEqual(44);
   });
 
-  test("Shorthand input is tappable on mobile (min height 44px)", async ({ page }) => {
+  test("Log-sets button is tappable on mobile (min height 44px)", async ({ page }) => {
     await page.goto("/");
     await page.getByTestId("start-session-button").click();
     await page.waitForURL(/\/session\/\d+/);
 
-    const input = page.getByTestId("shorthand-input").first();
-    await expect(input).toBeVisible({ timeout: 5000 });
-    const box = await input.boundingBox();
+    // Open the first exercise to reach the logging detail
+    const firstRow = page.locator('button[data-testid^="exercise-overview-"]').first();
+    await expect(firstRow).toBeVisible({ timeout: 10000 });
+    await firstRow.click();
+
+    const logBtn = page.locator('[data-testid^="log-sets-"]').first();
+    await expect(logBtn).toBeVisible({ timeout: 10000 });
+    const box = await logBtn.boundingBox();
     expect(box?.height).toBeGreaterThanOrEqual(44);
   });
 
-  test("User can log an exercise on mobile viewport", async ({ page }) => {
+  test("User can log sets on mobile viewport", async ({ page }) => {
     await page.goto("/");
     await page.getByTestId("start-session-button").click();
     await page.waitForURL(/\/session\/\d+/);
 
-    await expect(page.locator('[data-testid^="exercise-card-"]').first()).toBeVisible();
+    const firstRow = page.locator('button[data-testid^="exercise-overview-"]').first();
+    await expect(firstRow).toBeVisible({ timeout: 10000 });
+    await firstRow.click();
 
-    const input = page.getByTestId("shorthand-input").first();
-    await input.click();
-    await input.fill("20x12x3");
+    const card = page.locator('[data-testid^="exercise-card-"]');
+    await expect(card).toBeVisible({ timeout: 10000 });
 
-    await expect(page.getByTestId("shorthand-preview").first()).toBeVisible();
-    await page.getByText("LOG EXERCISE").first().click();
+    // Adjust reps on the first set, then log
+    await card.getByLabel("set 1 increase reps").click();
+    await card.locator('[data-testid^="log-sets-"]').click();
+
+    await expect(card.locator('[data-testid^="logged-summary-"]')).toBeVisible({ timeout: 5000 });
   });
 
   test("Navigation bar is visible and usable on mobile", async ({ page }) => {

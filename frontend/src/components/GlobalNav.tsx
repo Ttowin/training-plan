@@ -4,6 +4,7 @@ const NAV = [
   { to: "/", label: "HOME", icon: "⌂" },
   { to: "/history", label: "LOG", icon: "≡" },
   { to: "/progress", label: "DATA", icon: "▦" },
+  { to: "/proposals", label: "PROTO", icon: "✦" },
 ];
 
 export function GlobalNav() {
