@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { api } from "../utils/api.js";
 import { TerminalHeader } from "../components/TerminalHeader.js";
 import { CycleSelector } from "../components/CycleSelector.js";
+import { MatrixRain } from "../components/MatrixRain.js";
 import type { TrainingDay } from "../types/index.js";
 
 export function DashboardPage() {
@@ -40,7 +41,11 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-matrix-bg pb-20">
+    <div className="relative flex flex-col min-h-screen pb-20">
+      {/* Prominent Matrix code-rain backdrop for the home screen */}
+      <MatrixRain opacity={0.5} />
+
+      <div className="relative z-10 flex flex-col flex-1">
       <TerminalHeader title="GymMatrix" subtitle="PROGRESSIVE OVERLOAD SYSTEM v1.0" />
 
       <div className="flex-1 px-4 pt-6 space-y-6 max-w-lg mx-auto w-full">
@@ -164,6 +169,7 @@ export function DashboardPage() {
             <span>CYCLE</span><span>DAY {displayDay?.order_idx ?? "?"} / 4</span>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );
