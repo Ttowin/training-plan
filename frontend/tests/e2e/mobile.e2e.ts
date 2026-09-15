@@ -26,6 +26,11 @@ test.describe("Mobile viewport — Pixel 7 (412×915)", () => {
     await page.getByTestId("start-session-button").click();
     await page.waitForURL(/\/session\/\d+/);
 
+    // Open the first exercise to reach the logging detail
+    const firstRow = page.locator('button[data-testid^="exercise-overview-"]').first();
+    await expect(firstRow).toBeVisible({ timeout: 10000 });
+    await firstRow.click();
+
     const logBtn = page.locator('[data-testid^="log-sets-"]').first();
     await expect(logBtn).toBeVisible({ timeout: 10000 });
     const box = await logBtn.boundingBox();
@@ -37,14 +42,18 @@ test.describe("Mobile viewport — Pixel 7 (412×915)", () => {
     await page.getByTestId("start-session-button").click();
     await page.waitForURL(/\/session\/\d+/);
 
-    const firstCard = page.locator('[data-testid^="exercise-card-"]').first();
-    await expect(firstCard).toBeVisible({ timeout: 10000 });
+    const firstRow = page.locator('button[data-testid^="exercise-overview-"]').first();
+    await expect(firstRow).toBeVisible({ timeout: 10000 });
+    await firstRow.click();
+
+    const card = page.locator('[data-testid^="exercise-card-"]');
+    await expect(card).toBeVisible({ timeout: 10000 });
 
     // Adjust reps on the first set, then log
-    await firstCard.getByLabel("set 1 increase reps").click();
-    await firstCard.locator('[data-testid^="log-sets-"]').click();
+    await card.getByLabel("set 1 increase reps").click();
+    await card.locator('[data-testid^="log-sets-"]').click();
 
-    await expect(firstCard.locator('[data-testid^="logged-summary-"]')).toBeVisible({ timeout: 5000 });
+    await expect(card.locator('[data-testid^="logged-summary-"]')).toBeVisible({ timeout: 5000 });
   });
 
   test("Navigation bar is visible and usable on mobile", async ({ page }) => {

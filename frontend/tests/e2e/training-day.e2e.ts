@@ -33,37 +33,43 @@ test.describe("Full training day workflow — Chest & Shoulder Day", () => {
     await expect(page).toHaveURL(/\/session\/\d+/, { timeout: 5000 });
   });
 
-  test("Active session page shows plan exercises", async ({ page }) => {
+  test("Active session page shows a plan overview list", async ({ page }) => {
     await page.goto("/");
     await page.getByTestId("start-session-button").click();
     await page.waitForURL(/\/session\/\d+/);
 
-    // Plan exercises should be visible
-    const exerciseCards = page.locator('[data-testid^="exercise-card-"]');
-    await expect(exerciseCards.first()).toBeVisible({ timeout: 5000 });
-    const count = await exerciseCards.count();
+    // Overview shows one compact row per plan exercise
+    const rows = page.locator('button[data-testid^="exercise-overview-"]');
+    await expect(rows.first()).toBeVisible({ timeout: 5000 });
+    const count = await rows.count();
     expect(count).toBeGreaterThanOrEqual(3);
   });
 
-  test("User logs sets with the set-by-set logger", async ({ page }) => {
+  test("User opens an exercise and logs its sets", async ({ page }) => {
     await page.goto("/");
     await page.getByTestId("start-session-button").click();
     await page.waitForURL(/\/session\/\d+/);
 
-    // Wait for plan cards (they render after last-session data is fetched)
-    const firstCard = page.locator('[data-testid^="exercise-card-"]').first();
-    await expect(firstCard).toBeVisible({ timeout: 10000 });
+    // Open the first exercise from the overview
+    const firstRow = page.locator('button[data-testid^="exercise-overview-"]').first();
+    await expect(firstRow).toBeVisible({ timeout: 10000 });
+    await firstRow.click();
 
-    // Set rows are prefilled; bump the first set's weight
-    await firstCard.getByLabel("set 1 increase weight").click();
+    // Detail card renders (after last-session data is fetched)
+    const card = page.locator('[data-testid^="exercise-card-"]');
+    await expect(card).toBeVisible({ timeout: 10000 });
 
-    // Log the sets
-    await firstCard.locator('[data-testid^="log-sets-"]').click();
+    // Set rows are prefilled; bump the first set's weight, then log
+    await card.getByLabel("set 1 increase weight").click();
+    await card.locator('[data-testid^="log-sets-"]').click();
 
-    // A logged summary should appear on the card
-    const summary = firstCard.locator('[data-testid^="logged-summary-"]');
+    const summary = card.locator('[data-testid^="logged-summary-"]');
     await expect(summary).toBeVisible({ timeout: 5000 });
     await expect(summary).toContainText("logged");
+
+    // Back to overview shows the exercise as logged
+    await page.getByTestId("overview-back").click();
+    await expect(page.locator('button[data-testid^="exercise-overview-"]').first()).toContainText("set");
   });
 
   test("User adds an ad-hoc exercise not in the plan", async ({ page }) => {

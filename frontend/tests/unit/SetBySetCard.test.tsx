@@ -99,6 +99,55 @@ describe("SetBySetCard", () => {
     ]);
   });
 
+  it("lets the user add a new form cue", () => {
+    const onAddCue = vi.fn();
+    render(
+      <SetBySetCard
+        exercise={exercise}
+        lastWeekSets={lastWeek}
+        loggedSets={[]}
+        reminders={["肩胛骨同手踭向下沉"]}
+        onAddCue={onAddCue}
+        onLogSets={vi.fn()}
+      />
+    );
+    const input = screen.getByTestId("add-cue-input-7");
+    act(() => {
+      fireEvent.change(input, { target: { value: "膊頭放鬆" } });
+    });
+    act(() => {
+      fireEvent.click(screen.getByTestId("add-cue-submit-7"));
+    });
+    expect(onAddCue).toHaveBeenCalledWith("膊頭放鬆");
+    // New cue chip is rendered (index 1 after the seeded one)
+    expect(screen.getByTestId("reminder-cue-7-1")).toHaveTextContent("膊頭放鬆");
+    // Input cleared
+    expect(screen.getByTestId("add-cue-input-7")).toHaveValue("");
+  });
+
+  it("allows removing only user-added (custom) cues", () => {
+    const onRemoveCue = vi.fn();
+    render(
+      <SetBySetCard
+        exercise={exercise}
+        lastWeekSets={lastWeek}
+        loggedSets={[]}
+        reminders={["default cue", "my cue"]}
+        customCues={["my cue"]}
+        onRemoveCue={onRemoveCue}
+        onLogSets={vi.fn()}
+      />
+    );
+    // default cue has no remove button; custom one does
+    expect(screen.queryByTestId("remove-cue-7-0")).toBeNull();
+    const removeBtn = screen.getByTestId("remove-cue-7-1");
+    act(() => {
+      fireEvent.click(removeBtn);
+    });
+    expect(onRemoveCue).toHaveBeenCalledWith("my cue");
+    expect(screen.queryByText("my cue")).toBeNull();
+  });
+
   it("prefills from already-logged sets and shows a logged summary", () => {
     const logged = [loggedEntry(101, 45, 10), loggedEntry(102, 45, 10)];
     render(

@@ -3,9 +3,10 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../utils/api.js";
 import { SetBySetCard, type SetInput } from "../components/SetBySetCard.js";
+import { ExerciseOverviewRow } from "../components/ExerciseOverviewRow.js";
 import { AddExerciseModal } from "../components/AddExerciseModal.js";
 import { TerminalHeader } from "../components/TerminalHeader.js";
-import { getReminders } from "../data/exerciseReminders.js";
+import { addReminder, getCustomReminders, getReminders, removeReminder } from "../data/exerciseReminders.js";
 import type { Exercise, ParsedShorthand, SessionExercise } from "../types/index.js";
 
 export function ActiveSessionPage() {
@@ -16,6 +17,8 @@ export function ActiveSessionPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  // Which plan exercise is open for detailed logging; null = day overview.
+  const [selectedExerciseId, setSelectedExerciseId] = useState<number | null>(null);
 
   const { data: session, isLoading } = useQuery({
     queryKey: ["session", sessionId],
@@ -143,6 +146,57 @@ export function ActiveSessionPage() {
   const totalLogged = session.planExercises.filter((e) => (loggedMap.get(e.name)?.length ?? 0) > 0).length;
   const totalPlan = session.planExercises.length;
 
+  const selectedExercise = selectedExerciseId
+    ? session.planExercises.find((e) => e.id === selectedExerciseId) ?? null
+    : null;
+
+  // ---- Detail view: log the sets for one exercise ----
+  if (selectedExercise) {
+    return (
+      <div className="flex flex-col min-h-screen bg-matrix-bg pb-20">
+        <TerminalHeader
+          title={selectedExercise.name}
+          subtitle={`${session.training_day?.name ?? "SESSION"} · ELAPSED ${formatElapsed(elapsed)}`}
+        />
+        <div className="flex-1 px-4 pt-4 space-y-3 max-w-lg mx-auto w-full">
+          <button
+            type="button"
+            onClick={() => setSelectedExerciseId(null)}
+            data-testid="overview-back"
+            className="flex items-center gap-1 font-terminal text-xs text-matrix-text-muted uppercase tracking-widest hover:text-matrix-green transition-colors"
+          >
+            ◂ Back to overview
+          </button>
+
+          {!comparisonFetched ? (
+            <div className="text-xs font-terminal text-matrix-text-muted animate-pulse py-4">LOADING LAST SESSION…</div>
+          ) : (
+            <SetBySetCard
+              key={selectedExercise.id}
+              exercise={selectedExercise}
+              lastWeekSets={lastWeekMap.get(selectedExercise.name) ?? []}
+              loggedSets={loggedMap.get(selectedExercise.name) ?? []}
+              reminders={getReminders(selectedExercise.name)}
+              customCues={getCustomReminders(selectedExercise.name)}
+              onAddCue={(cue) => addReminder(selectedExercise.name, cue)}
+              onRemoveCue={(cue) => removeReminder(selectedExercise.name, cue)}
+              onLogSets={(sets) => logSets.mutateAsync({ exercise: selectedExercise, sets })}
+            />
+          )}
+
+          <button
+            type="button"
+            onClick={() => setSelectedExerciseId(null)}
+            className="w-full py-3 rounded-lg border border-matrix-border font-terminal text-xs text-matrix-text-muted uppercase tracking-widest hover:border-matrix-green hover:text-matrix-green transition-colors"
+          >
+            ◂ Done — back to overview
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ---- Overview view: scannable list of the whole training day ----
   return (
     <div className="flex flex-col min-h-screen bg-matrix-bg pb-20">
       <TerminalHeader
@@ -150,33 +204,27 @@ export function ActiveSessionPage() {
         subtitle={`ELAPSED: ${formatElapsed(elapsed)} · ${totalLogged}/${totalPlan} LOGGED`}
       />
 
-      <div className="flex-1 px-4 pt-4 space-y-3 max-w-lg mx-auto w-full">
-        {/* Plan exercises */}
-        <div className="text-xs font-terminal text-matrix-text-muted uppercase tracking-widest mb-2">
-          TRAINING PROTOCOL
+      <div className="flex-1 px-4 pt-4 space-y-2 max-w-lg mx-auto w-full">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-xs font-terminal text-matrix-text-muted uppercase tracking-widest">TRAINING PROTOCOL</span>
+          <span className="text-xs font-terminal text-matrix-green tabular-nums">{totalLogged}/{totalPlan}</span>
         </div>
 
-        {!comparisonFetched ? (
-          <div className="text-xs font-terminal text-matrix-text-muted animate-pulse py-4">
-            LOADING LAST SESSION…
-          </div>
-        ) : (
-          session.planExercises.map((ex) => (
-            <SetBySetCard
-              key={ex.id}
-              exercise={ex}
-              lastWeekSets={lastWeekMap.get(ex.name) ?? []}
-              loggedSets={loggedMap.get(ex.name) ?? []}
-              reminders={getReminders(ex.name)}
-              onLogSets={(sets) => logSets.mutateAsync({ exercise: ex, sets })}
-            />
-          ))
-        )}
+        {session.planExercises.map((ex) => (
+          <ExerciseOverviewRow
+            key={ex.id}
+            exercise={ex}
+            loggedSets={loggedMap.get(ex.name) ?? []}
+            lastWeekSets={lastWeekMap.get(ex.name) ?? []}
+            cueCount={getReminders(ex.name).length}
+            onOpen={() => setSelectedExerciseId(ex.id)}
+          />
+        ))}
 
         {/* Ad-hoc exercises */}
         {adHocExercises.length > 0 && (
           <>
-            <div className="text-xs font-terminal text-matrix-text-muted uppercase tracking-widest pt-2">
+            <div className="text-xs font-terminal text-matrix-text-muted uppercase tracking-widest pt-3">
               EXTRA EXERCISES
             </div>
             {adHocExercises.map((ex) => (
@@ -188,9 +236,7 @@ export function ActiveSessionPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-xs font-terminal text-matrix-cyan">{ex.exercise_name}</div>
-                    <div className="text-xs font-terminal text-matrix-text-muted">
-                      {ex.input_raw}
-                    </div>
+                    <div className="text-xs font-terminal text-matrix-text-muted">{ex.input_raw}</div>
                   </div>
                   <button
                     onClick={() => deleteExercise.mutate(ex.id)}
@@ -208,7 +254,7 @@ export function ActiveSessionPage() {
         <button
           onClick={() => setShowAddModal(true)}
           data-testid="add-exercise-button"
-          className="w-full py-3 border border-dashed border-matrix-border rounded-lg font-terminal text-xs text-matrix-text-muted hover:border-matrix-green hover:text-matrix-green transition-colors uppercase tracking-widest"
+          className="w-full py-3 mt-2 border border-dashed border-matrix-border rounded-lg font-terminal text-xs text-matrix-text-muted hover:border-matrix-green hover:text-matrix-green transition-colors uppercase tracking-widest"
         >
           ⊕ ADD EXTRA EXERCISE
         </button>

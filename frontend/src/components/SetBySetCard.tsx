@@ -14,6 +14,10 @@ interface Props {
   /** Sets already logged for this exercise in the current session. */
   loggedSets: SessionExercise[];
   reminders: string[];
+  /** Subset of `reminders` that are user-added and therefore removable. */
+  customCues?: string[];
+  onAddCue?: (cue: string) => void;
+  onRemoveCue?: (cue: string) => void;
   onLogSets: (sets: SetInput[]) => Promise<void>;
   disabled?: boolean;
 }
@@ -26,7 +30,17 @@ function formatNum(n: number): string {
   return Number.isInteger(n) ? n.toString() : n.toFixed(1);
 }
 
-export function SetBySetCard({ exercise, lastWeekSets, loggedSets, reminders, onLogSets, disabled }: Props) {
+export function SetBySetCard({
+  exercise,
+  lastWeekSets,
+  loggedSets,
+  reminders,
+  customCues,
+  onAddCue,
+  onRemoveCue,
+  onLogSets,
+  disabled,
+}: Props) {
   const idRef = useRef(0);
   const makeRow = (weight: number | null, reps: number): Row => ({ id: ++idRef.current, weight, reps });
 
@@ -45,7 +59,10 @@ export function SetBySetCard({ exercise, lastWeekSets, loggedSets, reminders, on
     return Array.from({ length: n }, () => makeRow(20, exercise.reps_max ?? exercise.reps_min ?? 12));
   });
 
-  const [selectedCues, setSelectedCues] = useState<Set<number>>(new Set());
+  const [cues, setCues] = useState<string[]>(reminders);
+  const [customSet, setCustomSet] = useState<Set<string>>(new Set(customCues ?? []));
+  const [selectedCues, setSelectedCues] = useState<Set<string>>(new Set());
+  const [newCue, setNewCue] = useState("");
   const [showCues, setShowCues] = useState<boolean>(reminders.length > 0);
   const [saving, setSaving] = useState(false);
 
@@ -61,12 +78,35 @@ export function SetBySetCard({ exercise, lastWeekSets, loggedSets, reminders, on
   function removeSet(id: number) {
     setRows((rs) => (rs.length <= 1 ? rs : rs.filter((r) => r.id !== id)));
   }
-  function toggleCue(i: number) {
+  function toggleCue(cue: string) {
     setSelectedCues((prev) => {
       const next = new Set(prev);
-      next.has(i) ? next.delete(i) : next.add(i);
+      next.has(cue) ? next.delete(cue) : next.add(cue);
       return next;
     });
+  }
+  function addCue() {
+    const trimmed = newCue.trim();
+    setNewCue("");
+    if (!trimmed || cues.includes(trimmed)) return;
+    setCues((c) => [...c, trimmed]);
+    setCustomSet((s) => new Set(s).add(trimmed));
+    setShowCues(true);
+    onAddCue?.(trimmed);
+  }
+  function removeCue(cue: string) {
+    setCues((c) => c.filter((x) => x !== cue));
+    setCustomSet((s) => {
+      const next = new Set(s);
+      next.delete(cue);
+      return next;
+    });
+    setSelectedCues((s) => {
+      const next = new Set(s);
+      next.delete(cue);
+      return next;
+    });
+    onRemoveCue?.(cue);
   }
 
   async function handleLog() {
@@ -136,42 +176,86 @@ export function SetBySetCard({ exercise, lastWeekSets, loggedSets, reminders, on
       </div>
 
       {/* Reminders / form cues */}
-      {reminders.length > 0 && (
-        <div className="px-4 pb-2">
-          <button
-            type="button"
-            onClick={() => setShowCues((v) => !v)}
-            data-testid={`reminders-toggle-${exercise.id}`}
-            className="flex items-center gap-1 text-[10px] font-terminal text-matrix-cyan uppercase tracking-widest"
-          >
-            <span>{showCues ? "▾" : "▸"}</span> Form cues · 提示 ({reminders.length})
-          </button>
-          {showCues && (
-            <div className="flex flex-wrap gap-2 mt-2" data-testid={`reminders-${exercise.id}`}>
-              {reminders.map((cue, i) => {
-                const active = selectedCues.has(i);
-                return (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => toggleCue(i)}
-                    data-testid={`reminder-cue-${exercise.id}-${i}`}
-                    aria-pressed={active}
-                    className={`px-2.5 py-1.5 rounded-lg border text-xs font-terminal transition-all ${
-                      active
-                        ? "border-matrix-cyan bg-matrix-cyan/15 text-matrix-cyan shadow-matrix-sm"
-                        : "border-matrix-border text-matrix-text-muted hover:border-matrix-cyan hover:text-matrix-cyan"
-                    }`}
-                  >
-                    {active ? "◉ " : "○ "}
-                    {cue}
-                  </button>
-                );
-              })}
+      <div className="px-4 pb-2">
+        <button
+          type="button"
+          onClick={() => setShowCues((v) => !v)}
+          data-testid={`reminders-toggle-${exercise.id}`}
+          className="flex items-center gap-1 text-[10px] font-terminal text-matrix-cyan uppercase tracking-widest"
+        >
+          <span>{showCues ? "▾" : "▸"}</span> Form cues · 提示 ({cues.length})
+        </button>
+        {showCues && (
+          <div className="mt-2 space-y-2" data-testid={`reminders-${exercise.id}`}>
+            {cues.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {cues.map((cue, i) => {
+                  const active = selectedCues.has(cue);
+                  const custom = customSet.has(cue);
+                  return (
+                    <span
+                      key={cue}
+                      className={`inline-flex items-center rounded-lg border text-xs font-terminal transition-all ${
+                        active
+                          ? "border-matrix-cyan bg-matrix-cyan/15 text-matrix-cyan shadow-matrix-sm"
+                          : "border-matrix-border text-matrix-text-muted"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggleCue(cue)}
+                        data-testid={`reminder-cue-${exercise.id}-${i}`}
+                        aria-pressed={active}
+                        className="pl-2.5 pr-2 py-1.5 hover:text-matrix-cyan"
+                      >
+                        {active ? "◉ " : "○ "}
+                        {cue}
+                      </button>
+                      {custom && (
+                        <button
+                          type="button"
+                          onClick={() => removeCue(cue)}
+                          aria-label={`remove cue ${cue}`}
+                          data-testid={`remove-cue-${exercise.id}-${i}`}
+                          className="pr-2 pl-1 text-matrix-red hover:text-matrix-red"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={newCue}
+                onChange={(e) => setNewCue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addCue();
+                  }
+                }}
+                placeholder="Add a form cue…"
+                data-testid={`add-cue-input-${exercise.id}`}
+                disabled={disabled}
+                className="flex-1 min-h-[40px] bg-matrix-bg border border-matrix-border rounded px-2.5 py-2 font-terminal text-xs text-matrix-cyan placeholder-matrix-text-muted focus:outline-none focus:ring-1 focus:ring-matrix-cyan"
+              />
+              <button
+                type="button"
+                onClick={addCue}
+                disabled={disabled || newCue.trim().length === 0}
+                data-testid={`add-cue-submit-${exercise.id}`}
+                className="min-h-[40px] px-3 rounded border border-matrix-cyan/50 text-matrix-cyan font-terminal text-xs uppercase tracking-widest hover:bg-matrix-cyan/10 transition-colors disabled:opacity-30"
+              >
+                Add
+              </button>
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
 
       {/* Last week reference */}
       <div className="px-4 pb-1">
