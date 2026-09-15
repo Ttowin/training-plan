@@ -2,10 +2,11 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../utils/api.js";
-import { ExerciseCard } from "../components/ExerciseCard.js";
+import { SetBySetCard, type SetInput } from "../components/SetBySetCard.js";
 import { AddExerciseModal } from "../components/AddExerciseModal.js";
 import { TerminalHeader } from "../components/TerminalHeader.js";
-import type { ParsedShorthand, SessionExercise } from "../types/index.js";
+import { getReminders } from "../data/exerciseReminders.js";
+import type { Exercise, ParsedShorthand, SessionExercise } from "../types/index.js";
 
 export function ActiveSessionPage() {
   const { id } = useParams<{ id: string }>();
@@ -22,7 +23,7 @@ export function ActiveSessionPage() {
     refetchInterval: 10_000,
   });
 
-  const { data: comparison } = useQuery({
+  const { data: comparison, isFetched: comparisonFetched } = useQuery({
     queryKey: ["comparison", sessionId],
     queryFn: () => api.getComparison(sessionId),
     enabled: !!session,
@@ -49,6 +50,22 @@ export function ActiveSessionPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["session", sessionId] }),
   });
 
+  // Log a full set-by-set record for a plan exercise: replace any previously
+  // logged sets for it, then persist one entry per set (weight × reps).
+  const logSets = useMutation({
+    mutationFn: async ({ exercise, sets }: { exercise: Exercise; sets: SetInput[] }) => {
+      const existing = (session?.exercises ?? []).filter((e) => e.exercise_name === exercise.name);
+      for (const e of existing) {
+        await api.deleteExercise(sessionId, e.id);
+      }
+      for (const s of sets) {
+        const inputRaw = s.weight === null ? `bwx${s.reps}` : `${s.weight}x${s.reps}`;
+        await api.logExercise(sessionId, { exerciseId: exercise.id, exerciseName: exercise.name, inputRaw });
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["session", sessionId] }),
+  });
+
   const completeSession = useMutation({
     mutationFn: () => api.completeSession(sessionId),
     onSuccess: () => {
@@ -64,15 +81,6 @@ export function ActiveSessionPage() {
     if (h > 0) return `${h}h ${m}m`;
     if (m > 0) return `${m}m ${String(s).padStart(2, "0")}s`;
     return `${s}s`;
-  }
-
-  async function handleLogExercise(
-    exerciseId: number,
-    exerciseName: string,
-    _parsed: ParsedShorthand,
-    raw: string
-  ) {
-    await logExercise.mutateAsync({ exerciseId, exerciseName, inputRaw: raw });
   }
 
   async function handleAddAdHoc(name: string, _parsed: ParsedShorthand, raw: string) {
@@ -106,19 +114,25 @@ export function ActiveSessionPage() {
     );
   }
 
-  // Build a map from exercise_name → last week's entry
-  const lastWeekMap = new Map<string, SessionExercise>();
+  // Last week's sets per exercise, expanded to one entry per set (a historical
+  // entry with sets>1 becomes that many rows), used to prefill the logging card.
+  const lastWeekMap = new Map<string, SetInput[]>();
   if (comparison?.exercises) {
     for (const ex of comparison.exercises) {
-      lastWeekMap.set(ex.exercise_name, ex);
+      const arr = lastWeekMap.get(ex.exercise_name) ?? [];
+      const count = ex.sets && ex.sets > 1 ? ex.sets : 1;
+      for (let k = 0; k < count; k++) arr.push({ weight: ex.weight_kg, reps: ex.reps ?? 0 });
+      lastWeekMap.set(ex.exercise_name, arr);
     }
   }
 
-  // Build a map from exercise_name → this session's logged entry
-  const loggedMap = new Map<string, SessionExercise>();
+  // This session's logged sets grouped per exercise (each set is its own entry).
+  const loggedMap = new Map<string, SessionExercise[]>();
   if (session.exercises) {
     for (const ex of session.exercises) {
-      loggedMap.set(ex.exercise_name, ex);
+      const arr = loggedMap.get(ex.exercise_name) ?? [];
+      arr.push(ex);
+      loggedMap.set(ex.exercise_name, arr);
     }
   }
 
@@ -126,7 +140,7 @@ export function ActiveSessionPage() {
   const planNames = new Set(session.planExercises.map((e) => e.name));
   const adHocExercises = session.exercises.filter((e) => !planNames.has(e.exercise_name));
 
-  const totalLogged = session.exercises.length;
+  const totalLogged = session.planExercises.filter((e) => (loggedMap.get(e.name)?.length ?? 0) > 0).length;
   const totalPlan = session.planExercises.length;
 
   return (
@@ -142,16 +156,22 @@ export function ActiveSessionPage() {
           TRAINING PROTOCOL
         </div>
 
-        {session.planExercises.map((ex) => (
-          <ExerciseCard
-            key={ex.id}
-            exercise={ex}
-            loggedEntry={loggedMap.get(ex.name)}
-            lastWeekEntry={lastWeekMap.get(ex.name) ?? null}
-            onLog={handleLogExercise}
-            onDelete={(entryId) => deleteExercise.mutate(entryId)}
-          />
-        ))}
+        {!comparisonFetched ? (
+          <div className="text-xs font-terminal text-matrix-text-muted animate-pulse py-4">
+            LOADING LAST SESSION…
+          </div>
+        ) : (
+          session.planExercises.map((ex) => (
+            <SetBySetCard
+              key={ex.id}
+              exercise={ex}
+              lastWeekSets={lastWeekMap.get(ex.name) ?? []}
+              loggedSets={loggedMap.get(ex.name) ?? []}
+              reminders={getReminders(ex.name)}
+              onLogSets={(sets) => logSets.mutateAsync({ exercise: ex, sets })}
+            />
+          ))
+        )}
 
         {/* Ad-hoc exercises */}
         {adHocExercises.length > 0 && (

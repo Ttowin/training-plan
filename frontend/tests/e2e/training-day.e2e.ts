@@ -45,28 +45,25 @@ test.describe("Full training day workflow — Chest & Shoulder Day", () => {
     expect(count).toBeGreaterThanOrEqual(3);
   });
 
-  test("User logs an exercise with shorthand input", async ({ page }) => {
+  test("User logs sets with the set-by-set logger", async ({ page }) => {
     await page.goto("/");
     await page.getByTestId("start-session-button").click();
     await page.waitForURL(/\/session\/\d+/);
 
-    // Wait for plan to load
-    await expect(page.locator('[data-testid^="exercise-card-"]').first()).toBeVisible();
+    // Wait for plan cards (they render after last-session data is fetched)
+    const firstCard = page.locator('[data-testid^="exercise-card-"]').first();
+    await expect(firstCard).toBeVisible({ timeout: 10000 });
 
-    // Type into first shorthand input
-    const firstInput = page.getByTestId("shorthand-input").first();
-    await firstInput.fill("15x12x3");
+    // Set rows are prefilled; bump the first set's weight
+    await firstCard.getByLabel("set 1 increase weight").click();
 
-    // Preview should appear
-    const preview = page.getByTestId("shorthand-preview").first();
-    await expect(preview).toBeVisible();
-    await expect(preview).toContainText("15kg");
+    // Log the sets
+    await firstCard.locator('[data-testid^="log-sets-"]').click();
 
-    // Click log button
-    await page.getByText("LOG EXERCISE").first().click();
-
-    // Input should clear after logging
-    await expect(firstInput).toHaveValue("", { timeout: 3000 });
+    // A logged summary should appear on the card
+    const summary = firstCard.locator('[data-testid^="logged-summary-"]');
+    await expect(summary).toBeVisible({ timeout: 5000 });
+    await expect(summary).toContainText("logged");
   });
 
   test("User adds an ad-hoc exercise not in the plan", async ({ page }) => {

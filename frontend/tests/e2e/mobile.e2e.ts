@@ -21,30 +21,30 @@ test.describe("Mobile viewport — Pixel 7 (412×915)", () => {
     expect(box?.height).toBeGreaterThanOrEqual(44);
   });
 
-  test("Shorthand input is tappable on mobile (min height 44px)", async ({ page }) => {
+  test("Log-sets button is tappable on mobile (min height 44px)", async ({ page }) => {
     await page.goto("/");
     await page.getByTestId("start-session-button").click();
     await page.waitForURL(/\/session\/\d+/);
 
-    const input = page.getByTestId("shorthand-input").first();
-    await expect(input).toBeVisible({ timeout: 5000 });
-    const box = await input.boundingBox();
+    const logBtn = page.locator('[data-testid^="log-sets-"]').first();
+    await expect(logBtn).toBeVisible({ timeout: 10000 });
+    const box = await logBtn.boundingBox();
     expect(box?.height).toBeGreaterThanOrEqual(44);
   });
 
-  test("User can log an exercise on mobile viewport", async ({ page }) => {
+  test("User can log sets on mobile viewport", async ({ page }) => {
     await page.goto("/");
     await page.getByTestId("start-session-button").click();
     await page.waitForURL(/\/session\/\d+/);
 
-    await expect(page.locator('[data-testid^="exercise-card-"]').first()).toBeVisible();
+    const firstCard = page.locator('[data-testid^="exercise-card-"]').first();
+    await expect(firstCard).toBeVisible({ timeout: 10000 });
 
-    const input = page.getByTestId("shorthand-input").first();
-    await input.click();
-    await input.fill("20x12x3");
+    // Adjust reps on the first set, then log
+    await firstCard.getByLabel("set 1 increase reps").click();
+    await firstCard.locator('[data-testid^="log-sets-"]').click();
 
-    await expect(page.getByTestId("shorthand-preview").first()).toBeVisible();
-    await page.getByText("LOG EXERCISE").first().click();
+    await expect(firstCard.locator('[data-testid^="logged-summary-"]')).toBeVisible({ timeout: 5000 });
   });
 
   test("Navigation bar is visible and usable on mobile", async ({ page }) => {
