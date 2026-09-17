@@ -62,6 +62,10 @@ export const queries = {
     LIMIT ? OFFSET ?
   `,
 
+  deleteSession: `
+    DELETE FROM training_sessions WHERE id = ?
+  `,
+
   // ── Session Exercises ──────────────────────────────────────────────────
   getExercisesForSession: `
     SELECT * FROM session_exercises WHERE session_id = ? ORDER BY logged_at ASC

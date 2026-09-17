@@ -246,4 +246,23 @@ sessions.get("/:id/comparison", async (c) => {
   return c.json({ data: { session: prevSession, exercises } });
 });
 
+// Delete session — cascades to session_exercises via FK
+sessions.delete("/:id", async (c) => {
+  const db = c.env.DB;
+  const sessionId = parseInt(c.req.param("id"));
+
+  const sessionRow = await db
+    .prepare(queries.getSessionById)
+    .bind(sessionId)
+    .first<Record<string, unknown>>();
+
+  if (!sessionRow) {
+    return c.json({ error: "Session not found" }, 404);
+  }
+
+  await db.prepare(queries.deleteSession).bind(sessionId).run();
+
+  return c.json({ data: { deleted: true } });
+});
+
 export { sessions };
