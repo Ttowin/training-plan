@@ -30,6 +30,8 @@ export const api = {
     request<import("../types").SessionDetail>(`/sessions/${id}`),
   completeSession: (id: number) =>
     request<import("../types").TrainingSession>(`/sessions/${id}/complete`, { method: "PATCH" }),
+  deleteSession: (id: number) =>
+    request<{ deleted: boolean }>(`/sessions/${id}`, { method: "DELETE" }),
   logExercise: (
     sessionId: number,
     data: { exerciseId?: number | null; exerciseName: string; inputRaw: string }
