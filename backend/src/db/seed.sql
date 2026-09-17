@@ -7,33 +7,33 @@ INSERT OR IGNORE INTO training_days (id, name, order_idx, muscle_targets) VALUES
   (4, 'Leg Day',              4, '[{"muscle":"Quad","sets":6},{"muscle":"Hamstring","sets":3},{"muscle":"Hip","sets":3}]');
 
 -- Chest & Shoulder Day exercises
-INSERT OR IGNORE INTO exercises (training_day_id, name, order_idx, default_sets, reps_min, reps_max, equipment, is_custom) VALUES
-  (1, 'Machine Chest Press',          1, 3, 10, 12, 'Smith machine or Machine', 0),
-  (1, 'Dumbbell Incline Chest Press', 2, 3, 10, 12, NULL,                      0),
-  (1, 'Machine Chest Fly',            3, 3, 12, 15, 'machine or cable',        0),
-  (1, 'Shoulder Press',               4, 3, 10, 12, 'Smith machine or DB',     0),
-  (1, 'Lateral Raise',                5, 3, 12, 15, 'dumbbell',                0);
+INSERT OR IGNORE INTO exercises (id, training_day_id, name, order_idx, default_sets, reps_min, reps_max, equipment, is_custom) VALUES
+  (1,  1, 'Machine Chest Press',          1, 3, 10, 12, 'Smith machine or Machine', 0),
+  (2,  1, 'Dumbbell Incline Chest Press', 2, 3, 10, 12, NULL,                      0),
+  (3,  1, 'Machine Chest Fly',            3, 3, 12, 15, 'machine or cable',        0),
+  (4,  1, 'Shoulder Press',               4, 3, 10, 12, 'Smith machine or DB',     0),
+  (5,  1, 'Lateral Raise',                5, 3, 12, 15, 'dumbbell',                0);
 
 -- Back Day exercises
-INSERT OR IGNORE INTO exercises (training_day_id, name, order_idx, default_sets, reps_min, reps_max, equipment, is_custom) VALUES
-  (2, 'High Row',                1, 3, 10, 12, 'Machine',              0),
-  (2, 'T Bar Row',               2, 3, 10, 12, 'Chest supported T bar', 0),
-  (2, 'Wide Grip Lat Pulldown',  3, 3, 10, 12, NULL,                   0),
-  (2, 'Low Row / Seated Row',    4, 3, 10, 12, NULL,                   0),
-  (2, 'Hammer Curl',             5, 3, 10, 15, NULL,                   0);
+INSERT OR IGNORE INTO exercises (id, training_day_id, name, order_idx, default_sets, reps_min, reps_max, equipment, is_custom) VALUES
+  (6,  2, 'High Row',                1, 3, 10, 12, 'Machine',              0),
+  (7,  2, 'T Bar Row',               2, 3, 10, 12, 'Chest supported T bar', 0),
+  (8,  2, 'Wide Grip Lat Pulldown',  3, 3, 10, 12, NULL,                   0),
+  (9,  2, 'Low Row / Seated Row',    4, 3, 10, 12, NULL,                   0),
+  (10, 2, 'Hammer Curl',             5, 3, 10, 15, NULL,                   0);
 
 -- Shoulder & Arm Day exercises
-INSERT OR IGNORE INTO exercises (training_day_id, name, order_idx, default_sets, reps_min, reps_max, equipment, is_custom) VALUES
-  (3, 'Shoulder Press',         1, 3, 10, 12, 'Machine',         0),
-  (3, 'Lateral Raise',          2, 3, 12, 15, 'Cable or machine', 0),
-  (3, 'Reverse Rear Delt Fly',  3, 3, 12, 15, NULL,              0),
-  (3, 'Dumbbell Front Raise',   4, 3, 12, 15, NULL,              0),
-  (3, 'Cable Tricep Pushdown',  5, 3, 10, 12, NULL,              0);
+INSERT OR IGNORE INTO exercises (id, training_day_id, name, order_idx, default_sets, reps_min, reps_max, equipment, is_custom) VALUES
+  (11, 3, 'Shoulder Press',         1, 3, 10, 12, 'Machine',         0),
+  (12, 3, 'Lateral Raise',          2, 3, 12, 15, 'Cable or machine', 0),
+  (13, 3, 'Reverse Rear Delt Fly',  3, 3, 12, 15, NULL,              0),
+  (14, 3, 'Dumbbell Front Raise',   4, 3, 12, 15, NULL,              0),
+  (15, 3, 'Cable Tricep Pushdown',  5, 3, 10, 12, NULL,              0);
 
 -- Leg Day exercises
-INSERT OR IGNORE INTO exercises (training_day_id, name, order_idx, default_sets, reps_min, reps_max, equipment, is_custom) VALUES
-  (4, 'Hack Squat',             1, 3,  9, 12, NULL, 0),
-  (4, 'Single Leg Leg Press',   2, 3, 12, 12, NULL, 0),
-  (4, 'Leg Extension',          3, 3, 15, 15, NULL, 0),
-  (4, 'Leg Curl',               4, 3, 15, 15, NULL, 0),
-  (4, 'Ab Abductor Machine',    5, 3, 12, 15, NULL, 0);
+INSERT OR IGNORE INTO exercises (id, training_day_id, name, order_idx, default_sets, reps_min, reps_max, equipment, is_custom) VALUES
+  (16, 4, 'Hack Squat',             1, 3,  9, 12, NULL, 0),
+  (17, 4, 'Single Leg Leg Press',   2, 3, 12, 12, NULL, 0),
+  (18, 4, 'Leg Extension',          3, 3, 15, 15, NULL, 0),
+  (19, 4, 'Leg Curl',               4, 3, 15, 15, NULL, 0),
+  (20, 4, 'Ab Abductor Machine',    5, 3, 12, 15, NULL, 0);

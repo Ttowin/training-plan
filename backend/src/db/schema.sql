@@ -20,8 +20,6 @@ CREATE TABLE IF NOT EXISTS exercises (
   is_custom        INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE INDEX IF NOT EXISTS idx_exercises_day ON exercises(training_day_id, order_idx);
-
 CREATE TABLE IF NOT EXISTS training_sessions (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,
   training_day_id  INTEGER NOT NULL REFERENCES training_days(id),

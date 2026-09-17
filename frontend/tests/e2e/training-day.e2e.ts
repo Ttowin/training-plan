@@ -33,16 +33,31 @@ test.describe("Full training day workflow — Chest & Shoulder Day", () => {
     await expect(page).toHaveURL(/\/session\/\d+/, { timeout: 5000 });
   });
 
-  test("Active session page shows plan exercises", async ({ page }) => {
+  test("Active session page shows plan exercises without duplicates", async ({ page }) => {
     await page.goto("/");
     await page.getByTestId("start-session-button").click();
     await page.waitForURL(/\/session\/\d+/);
 
-    // Plan exercises should be visible
+    // Plan exercises should be visible (Chest & Shoulder Day has exactly 5)
     const exerciseCards = page.locator('[data-testid^="exercise-card-"]');
     await expect(exerciseCards.first()).toBeVisible({ timeout: 5000 });
-    const count = await exerciseCards.count();
-    expect(count).toBeGreaterThanOrEqual(3);
+    await expect(exerciseCards).toHaveCount(5);
+
+    const names = await page.getByTestId("exercise-name").allTextContents();
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  test("Session page survives browser refresh", async ({ page }) => {
+    await page.goto("/");
+    await page.getByTestId("start-session-button").click();
+    await page.waitForURL(/\/session\/\d+/);
+
+    await expect(page.locator('[data-testid^="exercise-card-"]').first()).toBeVisible();
+    const sessionUrl = page.url();
+
+    await page.reload();
+    await expect(page).toHaveURL(sessionUrl, { timeout: 5000 });
+    await expect(page.locator('[data-testid^="exercise-card-"]').first()).toBeVisible({ timeout: 5000 });
   });
 
   test("User logs an exercise with shorthand input", async ({ page }) => {
