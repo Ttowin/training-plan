@@ -6,7 +6,6 @@ import { DashboardPage } from "./pages/DashboardPage.js";
 import { ActiveSessionPage } from "./pages/ActiveSessionPage.js";
 import { HistoryPage } from "./pages/HistoryPage.js";
 import { ProgressPage } from "./pages/ProgressPage.js";
-import { LoggingProposalsPage } from "./pages/LoggingProposalsPage.js";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -31,7 +30,6 @@ function App() {
               <Route path="/session/:id" element={<ActiveSessionPage />} />
               <Route path="/history" element={<HistoryPage />} />
               <Route path="/progress" element={<ProgressPage />} />
-              <Route path="/proposals" element={<LoggingProposalsPage />} />
             </Routes>
 
             <GlobalNav />
