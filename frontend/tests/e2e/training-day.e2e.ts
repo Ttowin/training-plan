@@ -33,16 +33,32 @@ test.describe("Full training day workflow — Chest & Shoulder Day", () => {
     await expect(page).toHaveURL(/\/session\/\d+/, { timeout: 5000 });
   });
 
-  test("Active session page shows a plan overview list", async ({ page }) => {
+  test("Active session overview shows plan exercises without duplicates", async ({ page }) => {
     await page.goto("/");
     await page.getByTestId("start-session-button").click();
     await page.waitForURL(/\/session\/\d+/);
 
-    // Overview shows one compact row per plan exercise
     const rows = page.locator('button[data-testid^="exercise-overview-"]');
     await expect(rows.first()).toBeVisible({ timeout: 5000 });
-    const count = await rows.count();
-    expect(count).toBeGreaterThanOrEqual(3);
+    await expect(rows).toHaveCount(5);
+
+    const names = await page
+      .locator('button[data-testid^="exercise-overview-"] > div.flex-1 > div.font-terminal.text-sm')
+      .allTextContents();
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  test("Session page survives browser refresh", async ({ page }) => {
+    await page.goto("/");
+    await page.getByTestId("start-session-button").click();
+    await page.waitForURL(/\/session\/\d+/);
+
+    await expect(page.locator('button[data-testid^="exercise-overview-"]').first()).toBeVisible();
+    const sessionUrl = page.url();
+
+    await page.reload();
+    await expect(page).toHaveURL(sessionUrl, { timeout: 5000 });
+    await expect(page.locator('button[data-testid^="exercise-overview-"]').first()).toBeVisible({ timeout: 5000 });
   });
 
   test("User opens an exercise and logs its sets", async ({ page }) => {

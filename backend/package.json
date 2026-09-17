@@ -9,9 +9,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "db:migrate:local": "wrangler d1 execute gymmatrix-db --local --file=src/db/schema.sql",
+    "db:dedupe:local": "wrangler d1 execute gymmatrix-db --local --file=src/db/migrations/002_dedupe_exercises.sql",
+    "db:migrate:local": "wrangler d1 execute gymmatrix-db --local --file=src/db/schema.sql && npm run db:dedupe:local",
     "db:seed:local": "wrangler d1 execute gymmatrix-db --local --file=src/db/seed.sql",
-    "db:migrate:remote": "wrangler d1 execute gymmatrix-db --remote --file=src/db/schema.sql",
+    "db:dedupe:remote": "wrangler d1 execute gymmatrix-db --remote --file=src/db/migrations/002_dedupe_exercises.sql",
+    "db:migrate:remote": "wrangler d1 execute gymmatrix-db --remote --file=src/db/schema.sql && npm run db:dedupe:remote",
     "db:seed:remote": "wrangler d1 execute gymmatrix-db --remote --file=src/db/seed.sql"
   },
   "dependencies": {
