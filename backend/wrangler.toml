@@ -6,7 +6,7 @@ compatibility_flags = ["nodejs_compat"]
 [[ d1_databases ]]
 binding = "DB"
 database_name = "gymmatrix-db"
-database_id = "local-gymmatrix-db"
+database_id = "1f2eaa61-d59c-4060-9b09-c8f7ffb2a6eb"
 
 [assets]
 directory = "../frontend/dist"
