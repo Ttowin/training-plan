@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MethodSelector } from "./MethodSelector.js";
 import { computeVolume } from "../utils/shorthandParser.js";
 import type { Exercise, SessionExercise } from "../types/index.js";
@@ -42,6 +42,86 @@ function formatNum(n: number): string {
   return Number.isInteger(n) ? n.toString() : n.toFixed(1);
 }
 
+type EditingField = { rowId: number; field: "weight" | "reps" } | null;
+
+interface EditableSetValueProps {
+  display: string;
+  editing: boolean;
+  draft: string;
+  disabled?: boolean;
+  inputMode: "decimal" | "numeric";
+  testId: string;
+  ariaLabel: string;
+  widthClass?: string;
+  onStartEdit: () => void;
+  onDraftChange: (value: string) => void;
+  onCommit: () => void;
+  onCancel: () => void;
+}
+
+function EditableSetValue({
+  display,
+  editing,
+  draft,
+  disabled,
+  inputMode,
+  testId,
+  ariaLabel,
+  widthClass = "w-12",
+  onStartEdit,
+  onDraftChange,
+  onCommit,
+  onCancel,
+}: EditableSetValueProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [editing]);
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        type="text"
+        inputMode={inputMode}
+        value={draft}
+        disabled={disabled}
+        aria-label={ariaLabel}
+        data-testid={`${testId}-input`}
+        onChange={(e) => onDraftChange(e.target.value)}
+        onBlur={onCommit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            onCommit();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            onCancel();
+          }
+        }}
+        className={`${widthClass} min-h-[40px] text-center bg-matrix-bg border border-matrix-green rounded font-terminal text-base text-matrix-green tabular-nums focus:outline-none focus:ring-1 focus:ring-matrix-green`}
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      aria-label={ariaLabel}
+      data-testid={testId}
+      onClick={onStartEdit}
+      className={`${widthClass} min-h-[40px] text-center font-terminal text-base text-matrix-green tabular-nums rounded border border-transparent hover:border-matrix-green/40 transition-colors disabled:opacity-30`}
+    >
+      {display}
+    </button>
+  );
+}
+
 export function SetBySetCard({
   exercise,
   methods,
@@ -83,8 +163,47 @@ export function SetBySetCard({
   const [newCue, setNewCue] = useState("");
   const [showCues, setShowCues] = useState<boolean>(reminders.length > 0);
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState<EditingField>(null);
+  const [draft, setDraft] = useState("");
 
   const round = (v: number) => Math.round(v * 100) / 100;
+
+  function parseWeightInput(raw: string): number {
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed.toLowerCase() === "bw") return 0;
+    const n = parseFloat(trimmed);
+    if (Number.isNaN(n) || n < 0) return 0;
+    return round(n);
+  }
+
+  function parseRepsInput(raw: string, fallback: number): number {
+    const n = parseInt(raw.trim(), 10);
+    if (Number.isNaN(n) || n < 1) return fallback;
+    return Math.min(99, n);
+  }
+
+  function startEditing(rowId: number, field: "weight" | "reps", initial: string) {
+    if (disabled) return;
+    setEditing({ rowId, field });
+    setDraft(initial);
+  }
+
+  function cancelEditing() {
+    setEditing(null);
+    setDraft("");
+  }
+
+  function commitWeight(rowId: number) {
+    const value = parseWeightInput(draft);
+    update(rowId, { weight: value });
+    cancelEditing();
+  }
+
+  function commitReps(rowId: number, fallback: number) {
+    const value = parseRepsInput(draft, fallback);
+    update(rowId, { reps: value });
+    cancelEditing();
+  }
 
   function update(id: number, patch: Partial<Row>) {
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
@@ -345,9 +464,21 @@ export function SetBySetCard({
                   >
                     −
                   </button>
-                  <span className="w-12 text-center font-terminal text-base text-matrix-green tabular-nums" data-testid={`set-row-${exercise.id}-${i}-weight`}>
-                    {r.weight == null ? "BW" : formatNum(r.weight)}
-                  </span>
+                  <EditableSetValue
+                    display={r.weight == null ? "BW" : formatNum(r.weight)}
+                    editing={editing?.rowId === r.id && editing.field === "weight"}
+                    draft={draft}
+                    disabled={disabled}
+                    inputMode="decimal"
+                    testId={`set-row-${exercise.id}-${i}-weight`}
+                    ariaLabel={`set ${i + 1} weight in kg`}
+                    onStartEdit={() =>
+                      startEditing(r.id, "weight", r.weight == null ? "" : formatNum(r.weight))
+                    }
+                    onDraftChange={setDraft}
+                    onCommit={() => commitWeight(r.id)}
+                    onCancel={cancelEditing}
+                  />
                   <button
                     type="button"
                     aria-label={`set ${i + 1} increase weight`}
@@ -371,9 +502,20 @@ export function SetBySetCard({
               >
                 −
               </button>
-              <span className="w-8 text-center font-terminal text-base text-matrix-green tabular-nums" data-testid={`set-row-${exercise.id}-${i}-reps`}>
-                {r.reps}
-              </span>
+              <EditableSetValue
+                display={String(r.reps)}
+                editing={editing?.rowId === r.id && editing.field === "reps"}
+                draft={draft}
+                disabled={disabled}
+                inputMode="numeric"
+                testId={`set-row-${exercise.id}-${i}-reps`}
+                ariaLabel={`set ${i + 1} reps`}
+                widthClass="w-8"
+                onStartEdit={() => startEditing(r.id, "reps", String(r.reps))}
+                onDraftChange={setDraft}
+                onCommit={() => commitReps(r.id, r.reps)}
+                onCancel={cancelEditing}
+              />
               <button
                 type="button"
                 aria-label={`set ${i + 1} increase reps`}

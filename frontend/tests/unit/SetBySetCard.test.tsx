@@ -200,4 +200,30 @@ describe("SetBySetCard", () => {
     // Button switches to update mode
     expect(screen.getByTestId("log-sets-7")).toHaveTextContent(/update sets/i);
   });
+
+  it("lets the user type weight and reps via keyboard after clicking the value", () => {
+    render(
+      <SetBySetCard exercise={exercise} {...methodProps} lastWeekSets={lastWeek} loggedSets={[]} reminders={[]} onLogSets={vi.fn()} />
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("set-row-7-0-weight"));
+    });
+    const weightInput = screen.getByTestId("set-row-7-0-weight-input");
+    act(() => {
+      fireEvent.change(weightInput, { target: { value: "37.5" } });
+      fireEvent.blur(weightInput);
+    });
+    expect(screen.getByTestId("set-row-7-0-weight")).toHaveTextContent("37.5");
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("set-row-7-0-reps"));
+    });
+    const repsInput = screen.getByTestId("set-row-7-0-reps-input");
+    act(() => {
+      fireEvent.change(repsInput, { target: { value: "8" } });
+      fireEvent.keyDown(repsInput, { key: "Enter" });
+    });
+    expect(screen.getByTestId("set-row-7-0-reps")).toHaveTextContent("8");
+  });
 });
