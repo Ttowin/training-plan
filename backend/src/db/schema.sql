@@ -41,6 +41,8 @@ CREATE TABLE IF NOT EXISTS session_exercises (
   reps          INTEGER DEFAULT NULL,
   sets          INTEGER DEFAULT NULL,
   input_raw     TEXT    DEFAULT NULL,
+  method_id     TEXT    DEFAULT NULL,
+  method_label  TEXT    DEFAULT NULL,
   logged_at     TEXT    NOT NULL
 );
 

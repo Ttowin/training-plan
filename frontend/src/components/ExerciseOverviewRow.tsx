@@ -1,16 +1,32 @@
 import { computeVolume } from "../utils/shorthandParser.js";
+import { MethodSelector } from "./MethodSelector.js";
 import type { Exercise, SessionExercise } from "../types/index.js";
+import type { ExerciseMethod } from "../utils/parseSeedMethods.js";
 import type { SetInput } from "./SetBySetCard.js";
 
 interface Props {
   exercise: Exercise;
+  methods: ExerciseMethod[];
+  selectedMethod: ExerciseMethod | null;
+  onMethodSelect: (methodId: string) => void;
+  onAddMethod: () => void;
   loggedSets: SessionExercise[];
   lastWeekSets: SetInput[];
   cueCount: number;
   onOpen: () => void;
 }
 
-export function ExerciseOverviewRow({ exercise, loggedSets, lastWeekSets, cueCount, onOpen }: Props) {
+export function ExerciseOverviewRow({
+  exercise,
+  methods,
+  selectedMethod,
+  onMethodSelect,
+  onAddMethod,
+  loggedSets,
+  lastWeekSets,
+  cueCount,
+  onOpen,
+}: Props) {
   const isLogged = loggedSets.length > 0;
   const loggedVolume = loggedSets.reduce((acc, e) => acc + computeVolume(e.weight_kg, e.reps ?? 0, e.sets ?? 1), 0);
   const lastVolume = lastWeekSets.reduce((acc, s) => acc + (s.weight ?? 0) * s.reps, 0);
@@ -25,11 +41,8 @@ export function ExerciseOverviewRow({ exercise, loggedSets, lastWeekSets, cueCou
       : "?";
 
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      data-testid={`exercise-overview-${exercise.id}`}
-      className={`w-full text-left flex items-center gap-3 rounded-lg border px-3 py-3 transition-colors ${
+    <div
+      className={`rounded-lg border transition-colors ${
         isLogged
           ? declined
             ? "border-matrix-red/60 bg-matrix-bg-card"
@@ -37,46 +50,69 @@ export function ExerciseOverviewRow({ exercise, loggedSets, lastWeekSets, cueCou
           : "border-matrix-border bg-matrix-bg-card hover:border-matrix-green"
       }`}
     >
-      <span
-        className={`w-5 text-center font-terminal text-xs ${isLogged ? "text-matrix-green" : "text-matrix-text-muted"}`}
-        aria-hidden
+      <button
+        type="button"
+        onClick={onOpen}
+        data-testid={`exercise-overview-${exercise.id}`}
+        className="w-full text-left flex items-center gap-3 px-3 py-3"
       >
-        {isLogged ? "■" : "□"}
-      </span>
+        <span
+          className={`w-5 text-center font-terminal text-xs ${isLogged ? "text-matrix-green" : "text-matrix-text-muted"}`}
+          aria-hidden
+        >
+          {isLogged ? "■" : "□"}
+        </span>
 
-      <div className="flex-1 min-w-0">
-        <div className="font-terminal text-sm text-matrix-green truncate">{exercise.name}</div>
-        <div className="text-[11px] font-terminal text-matrix-text-muted truncate">
-          {exercise.default_sets}×{repsLabel}
-          {exercise.equipment ? ` · ${exercise.equipment}` : ""}
-          {cueCount > 0 ? ` · ✦${cueCount}` : ""}
-        </div>
-      </div>
-
-      <div className="flex-shrink-0 text-right">
-        {isLogged ? (
-          <div
-            className={`text-xs font-terminal ${improved ? "text-matrix-green" : declined ? "text-matrix-red" : "text-matrix-cyan"}`}
-            data-testid={`exercise-overview-${exercise.id}-status`}
-          >
-            {improved && "▲ "}
-            {declined && "▼ "}
-            {loggedSets.length} set{loggedSets.length === 1 ? "" : "s"}
-            <div className="text-matrix-text-muted">vol {loggedVolume.toFixed(0)}</div>
+        <div className="flex-1 min-w-0">
+          <div className="font-terminal text-sm text-matrix-green truncate">{exercise.name}</div>
+          <div className="text-[11px] font-terminal text-matrix-text-muted truncate">
+            {exercise.default_sets}×{repsLabel}
+            {selectedMethod ? ` · ${selectedMethod.label}` : exercise.equipment ? ` · ${exercise.equipment}` : ""}
+            {cueCount > 0 ? ` · ✦${cueCount}` : ""}
           </div>
-        ) : (
-          <span
-            className="text-xs font-terminal text-matrix-text-muted"
-            data-testid={`exercise-overview-${exercise.id}-status`}
-          >
-            log ▸
-          </span>
-        )}
-      </div>
+        </div>
 
-      <span className="text-matrix-text-muted font-terminal text-xs" aria-hidden>
-        ▸
-      </span>
-    </button>
+        <div className="flex-shrink-0 text-right">
+          {isLogged ? (
+            <div
+              className={`text-xs font-terminal ${improved ? "text-matrix-green" : declined ? "text-matrix-red" : "text-matrix-cyan"}`}
+              data-testid={`exercise-overview-${exercise.id}-status`}
+            >
+              {improved && "▲ "}
+              {declined && "▼ "}
+              {loggedSets.length} set{loggedSets.length === 1 ? "" : "s"}
+              <div className="text-matrix-text-muted">vol {loggedVolume.toFixed(0)}</div>
+            </div>
+          ) : (
+            <span
+              className="text-xs font-terminal text-matrix-text-muted"
+              data-testid={`exercise-overview-${exercise.id}-status`}
+            >
+              log ▸
+            </span>
+          )}
+        </div>
+
+        <span className="text-matrix-text-muted font-terminal text-xs" aria-hidden>
+          ▸
+        </span>
+      </button>
+
+      {methods.length > 1 && (
+        <div
+          className="px-3 pb-3"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <MethodSelector
+            methods={methods}
+            selectedId={selectedMethod?.id ?? null}
+            onSelect={onMethodSelect}
+            onAdd={onAddMethod}
+            size="compact"
+          />
+        </div>
+      )}
+    </div>
   );
 }
