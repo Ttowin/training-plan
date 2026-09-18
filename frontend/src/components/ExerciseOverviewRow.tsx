@@ -49,9 +49,13 @@ export function ExerciseOverviewRow({
             : "border-matrix-green/70 bg-matrix-bg-card"
           : "border-matrix-border bg-matrix-bg-card hover:border-matrix-green"
       }`}
-      data-testid={`exercise-overview-${exercise.id}`}
     >
-      <button type="button" onClick={onOpen} className="w-full text-left flex items-center gap-3 px-3 py-3">
+      <button
+        type="button"
+        onClick={onOpen}
+        data-testid={`exercise-overview-${exercise.id}`}
+        className="w-full text-left flex items-center gap-3 px-3 py-3"
+      >
         <span
           className={`w-5 text-center font-terminal text-xs ${isLogged ? "text-matrix-green" : "text-matrix-text-muted"}`}
           aria-hidden

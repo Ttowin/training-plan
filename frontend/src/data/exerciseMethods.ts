@@ -3,8 +3,6 @@ import {
   type ExerciseMethod,
   type WeightMode,
   parseSeedMethods,
-  seededMethodId,
-  inferWeightMode,
 } from "../utils/parseSeedMethods.js";
 
 const STORAGE_KEY = "gymmatrix:exercise-methods";
