@@ -73,8 +73,8 @@ export const queries = {
 
   logExercise: `
     INSERT INTO session_exercises
-      (session_id, exercise_id, exercise_name, weight_kg, reps, sets, input_raw, logged_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      (session_id, exercise_id, exercise_name, weight_kg, reps, sets, input_raw, method_id, method_label, logged_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING *
   `,
 
@@ -147,6 +147,8 @@ export function parseSessionExercise(row: Record<string, unknown>): SessionExerc
     reps: (row.reps as number | null) ?? null,
     sets: (row.sets as number | null) ?? null,
     input_raw: (row.input_raw as string | null) ?? null,
+    method_id: (row.method_id as string | null) ?? null,
+    method_label: (row.method_label as string | null) ?? null,
     logged_at: row.logged_at as string,
   };
 }

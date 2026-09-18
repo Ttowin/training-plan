@@ -45,6 +45,8 @@ export interface SessionExercise {
   reps: number | null;
   sets: number | null;
   input_raw: string | null;
+  method_id: string | null;
+  method_label: string | null;
   logged_at: string;
 }
 
