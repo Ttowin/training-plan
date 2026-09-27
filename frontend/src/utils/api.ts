@@ -34,7 +34,13 @@ export const api = {
     request<{ deleted: boolean }>(`/sessions/${id}`, { method: "DELETE" }),
   logExercise: (
     sessionId: number,
-    data: { exerciseId?: number | null; exerciseName: string; inputRaw: string }
+    data: {
+      exerciseId?: number | null;
+      exerciseName: string;
+      inputRaw: string;
+      methodId?: string | null;
+      methodLabel?: string | null;
+    }
   ) =>
     request<import("../types").SessionExercise>(`/sessions/${sessionId}/exercises`, {
       method: "POST",

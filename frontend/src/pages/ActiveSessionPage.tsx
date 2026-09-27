@@ -1,12 +1,25 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../utils/api.js";
 import { SetBySetCard, type SetInput } from "../components/SetBySetCard.js";
 import { ExerciseOverviewRow } from "../components/ExerciseOverviewRow.js";
+import { MethodEditorSheet } from "../components/MethodEditorSheet.js";
 import { AddExerciseModal } from "../components/AddExerciseModal.js";
 import { TerminalHeader } from "../components/TerminalHeader.js";
 import { addReminder, getCustomReminders, getReminders, removeReminder } from "../data/exerciseReminders.js";
+import {
+  addCustomMethod,
+  deleteCustomMethod,
+  getDefaultMethodId,
+  getMethodById,
+  getMethods,
+  hideSeededMethod,
+  setDefaultMethod,
+  setLastUsedMethod,
+  updateMethod,
+} from "../data/exerciseMethods.js";
+import { logKey, type ExerciseMethod, type WeightMode } from "../utils/parseSeedMethods.js";
 import type { Exercise, ParsedShorthand, SessionExercise } from "../types/index.js";
 
 export function ActiveSessionPage() {
@@ -19,6 +32,10 @@ export function ActiveSessionPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [selectedExerciseId, setSelectedExerciseId] = useState<number | null>(null);
+  const [methodSelections, setMethodSelections] = useState<Record<number, string>>({});
+  const [methodsVersion, setMethodsVersion] = useState(0);
+  const [methodEditor, setMethodEditor] = useState<{ exercise: Exercise; method?: ExerciseMethod | null } | null>(null);
+  const [pendingMethodSwitch, setPendingMethodSwitch] = useState<{ exerciseId: number; methodId: string } | null>(null);
 
   const { data: session, isLoading } = useQuery({
     queryKey: ["session", sessionId],
@@ -51,8 +68,13 @@ export function ActiveSessionPage() {
   }, [session?.started_at, session?.completed_at]);
 
   const logExercise = useMutation({
-    mutationFn: (data: { exerciseId?: number | null; exerciseName: string; inputRaw: string }) =>
-      api.logExercise(sessionId, data),
+    mutationFn: (data: {
+      exerciseId?: number | null;
+      exerciseName: string;
+      inputRaw: string;
+      methodId?: string | null;
+      methodLabel?: string | null;
+    }) => api.logExercise(sessionId, data),
     onSuccess: invalidateSessionData,
   });
 
@@ -62,15 +84,34 @@ export function ActiveSessionPage() {
   });
 
   const logSets = useMutation({
-    mutationFn: async ({ exercise, sets }: { exercise: Exercise; sets: SetInput[] }) => {
-      const existing = (session?.exercises ?? []).filter((e) => e.exercise_name === exercise.name);
+    mutationFn: async ({
+      exercise,
+      method,
+      sets,
+    }: {
+      exercise: Exercise;
+      method: ExerciseMethod | null;
+      sets: SetInput[];
+    }) => {
+      const existing = (session?.exercises ?? []).filter(
+        (e) =>
+          e.exercise_name === exercise.name &&
+          (e.method_id ?? "") === (method?.id ?? "")
+      );
       for (const e of existing) {
         await api.deleteExercise(sessionId, e.id);
       }
       for (const s of sets) {
         const inputRaw = s.weight === null ? `bwx${s.reps}` : `${s.weight}x${s.reps}`;
-        await api.logExercise(sessionId, { exerciseId: exercise.id, exerciseName: exercise.name, inputRaw });
+        await api.logExercise(sessionId, {
+          exerciseId: exercise.id,
+          exerciseName: exercise.name,
+          inputRaw,
+          methodId: method?.id ?? null,
+          methodLabel: method?.label ?? null,
+        });
       }
+      if (method) setLastUsedMethod(exercise.id, method.id);
     },
     onSuccess: invalidateSessionData,
   });
@@ -110,6 +151,114 @@ export function ActiveSessionPage() {
     await logExercise.mutateAsync({ exerciseId: null, exerciseName: name, inputRaw: raw });
   }
 
+  useEffect(() => {
+    if (!session) return;
+    setMethodSelections((prev) => {
+      const next = { ...prev };
+      for (const ex of session.planExercises) {
+        if (next[ex.id]) continue;
+        const loggedForExercise = session.exercises.filter((e) => e.exercise_id === ex.id);
+        const methodFromLog = loggedForExercise.find((e) => e.method_id)?.method_id;
+        const defaultId = methodFromLog ?? getDefaultMethodId(ex);
+        if (defaultId) next[ex.id] = defaultId;
+      }
+      return next;
+    });
+  }, [session?.id, session?.planExercises, session?.exercises, methodsVersion]);
+
+  const refreshMethods = useCallback(() => setMethodsVersion((v) => v + 1), []);
+
+  function getExerciseMethods(exercise: Exercise) {
+    void methodsVersion;
+    return getMethods(exercise);
+  }
+
+  function getSelectedMethod(exercise: Exercise): ExerciseMethod | null {
+    const methods = getExerciseMethods(exercise);
+    const selectedId = methodSelections[exercise.id] ?? getDefaultMethodId(exercise);
+    return methods.find((m) => m.id === selectedId) ?? methods[0] ?? null;
+  }
+
+  function getLoggedSets(exercise: Exercise, method: ExerciseMethod | null): SessionExercise[] {
+    return (session?.exercises ?? []).filter(
+      (e) => e.exercise_name === exercise.name && (e.method_id ?? "") === (method?.id ?? "")
+    );
+  }
+
+  function requestMethodSwitch(exercise: Exercise, methodId: string) {
+    const currentId = methodSelections[exercise.id];
+    if (currentId === methodId) return;
+
+    const currentLogged = getLoggedSets(exercise, getMethodById(exercise, currentId ?? "") ?? getSelectedMethod(exercise));
+    if (currentLogged.length > 0) {
+      setPendingMethodSwitch({ exerciseId: exercise.id, methodId });
+      return;
+    }
+
+    setMethodSelections((prev) => ({ ...prev, [exercise.id]: methodId }));
+    setLastUsedMethod(exercise.id, methodId);
+  }
+
+  async function confirmMethodSwitch() {
+    if (!pendingMethodSwitch || !session) return;
+    const exercise = session.planExercises.find((e) => e.id === pendingMethodSwitch.exerciseId);
+    if (!exercise) return;
+
+    const currentMethod = getSelectedMethod(exercise);
+    const existing = getLoggedSets(exercise, currentMethod);
+    for (const entry of existing) {
+      await api.deleteExercise(sessionId, entry.id);
+    }
+    invalidateSessionData();
+    setMethodSelections((prev) => ({ ...prev, [exercise.id]: pendingMethodSwitch.methodId }));
+    setLastUsedMethod(exercise.id, pendingMethodSwitch.methodId);
+    setPendingMethodSwitch(null);
+  }
+
+  function handleSaveMethod(
+    exercise: Exercise,
+    editingMethod: ExerciseMethod | null | undefined,
+    input: { label: string; weightMode: WeightMode; notes?: string; setAsDefault?: boolean }
+  ) {
+    let saved: ExerciseMethod | null = null;
+    if (editingMethod) {
+      saved = updateMethod(exercise, editingMethod.id, input);
+    } else {
+      saved = addCustomMethod(exercise.id, input);
+    }
+    refreshMethods();
+    if (saved) {
+      setMethodSelections((prev) => ({ ...prev, [exercise.id]: saved!.id }));
+      if (input.setAsDefault) setDefaultMethod(exercise.id, saved.id);
+      setLastUsedMethod(exercise.id, saved.id);
+    }
+  }
+
+  const lastWeekMap = useMemo(() => {
+    const map = new Map<string, SetInput[]>();
+    if (!comparison?.exercises) return map;
+    for (const ex of comparison.exercises) {
+      const key = logKey(ex.exercise_name, ex.method_id);
+      const arr = map.get(key) ?? [];
+      const count = ex.sets && ex.sets > 1 ? ex.sets : 1;
+      for (let k = 0; k < count; k++) arr.push({ weight: ex.weight_kg, reps: ex.reps ?? 0 });
+      map.set(key, arr);
+    }
+    return map;
+  }, [comparison?.exercises]);
+
+  const loggedMap = useMemo(() => {
+    const map = new Map<string, SessionExercise[]>();
+    if (!session?.exercises) return map;
+    for (const ex of session.exercises) {
+      const key = logKey(ex.exercise_name, ex.method_id);
+      const arr = map.get(key) ?? [];
+      arr.push(ex);
+      map.set(key, arr);
+    }
+    return map;
+  }, [session?.exercises]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-matrix-bg flex items-center justify-center">
@@ -126,27 +275,13 @@ export function ActiveSessionPage() {
     );
   }
 
-  const lastWeekMap = new Map<string, SetInput[]>();
-  if (comparison?.exercises) {
-    for (const ex of comparison.exercises) {
-      const arr = lastWeekMap.get(ex.exercise_name) ?? [];
-      const count = ex.sets && ex.sets > 1 ? ex.sets : 1;
-      for (let k = 0; k < count; k++) arr.push({ weight: ex.weight_kg, reps: ex.reps ?? 0 });
-      lastWeekMap.set(ex.exercise_name, arr);
-    }
-  }
-
-  const loggedMap = new Map<string, SessionExercise[]>();
-  for (const ex of session.exercises) {
-    const arr = loggedMap.get(ex.exercise_name) ?? [];
-    arr.push(ex);
-    loggedMap.set(ex.exercise_name, arr);
-  }
-
   const planNames = new Set(session.planExercises.map((e) => e.name));
   const adHocExercises = session.exercises.filter((e) => !planNames.has(e.exercise_name));
 
-  const totalLogged = session.planExercises.filter((e) => (loggedMap.get(e.name)?.length ?? 0) > 0).length;
+  const totalLogged = session.planExercises.filter((e) => {
+    const method = getSelectedMethod(e);
+    return (loggedMap.get(logKey(e.name, method?.id ?? null))?.length ?? 0) > 0;
+  }).length;
   const totalPlan = session.planExercises.length;
 
   const selectedExercise = selectedExerciseId
@@ -198,6 +333,10 @@ export function ActiveSessionPage() {
   );
 
   if (selectedExercise) {
+    const methods = getExerciseMethods(selectedExercise);
+    const selectedMethod = getSelectedMethod(selectedExercise);
+    const methodKey = logKey(selectedExercise.name, selectedMethod?.id ?? null);
+
     return (
       <div className="flex flex-col min-h-screen bg-matrix-bg pb-20">
         <TerminalHeader title={selectedExercise.name} subtitle={detailSubtitle} />
@@ -224,16 +363,48 @@ export function ActiveSessionPage() {
             <div className="text-xs font-terminal text-matrix-text-muted animate-pulse py-4">LOADING LAST SESSION…</div>
           ) : (
             <SetBySetCard
-              key={selectedExercise.id}
+              key={`${selectedExercise.id}-${selectedMethod?.id ?? "none"}`}
               exercise={selectedExercise}
-              lastWeekSets={lastWeekMap.get(selectedExercise.name) ?? []}
-              loggedSets={loggedMap.get(selectedExercise.name) ?? []}
+              methods={methods}
+              selectedMethod={selectedMethod}
+              onMethodSelect={(methodId) => requestMethodSwitch(selectedExercise, methodId)}
+              onAddMethod={() => setMethodEditor({ exercise: selectedExercise, method: null })}
+              onEditMethod={(method) => setMethodEditor({ exercise: selectedExercise, method })}
+              lastWeekSets={lastWeekMap.get(methodKey) ?? []}
+              loggedSets={loggedMap.get(methodKey) ?? []}
               reminders={getReminders(selectedExercise.name)}
               customCues={getCustomReminders(selectedExercise.name)}
               onAddCue={(cue) => addReminder(selectedExercise.name, cue)}
               onRemoveCue={(cue) => removeReminder(selectedExercise.name, cue)}
-              onLogSets={(sets) => logSets.mutateAsync({ exercise: selectedExercise, sets })}
+              onLogSets={(sets) =>
+                logSets.mutateAsync({ exercise: selectedExercise, method: selectedMethod, sets })
+              }
             />
+          )}
+
+          {pendingMethodSwitch?.exerciseId === selectedExercise.id && (
+            <div className="rounded-lg border border-matrix-yellow/40 bg-matrix-bg-card p-3 space-y-2" data-testid="method-switch-confirm">
+              <div className="text-xs font-terminal text-matrix-yellow text-center">
+                Switch method? Logged sets for the current method will be cleared.
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPendingMethodSwitch(null)}
+                  className="flex-1 py-2 rounded border border-matrix-border font-terminal text-xs text-matrix-text-muted"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => confirmMethodSwitch()}
+                  data-testid="confirm-method-switch"
+                  className="flex-1 py-2 rounded bg-matrix-yellow/20 border border-matrix-yellow font-terminal text-xs text-matrix-yellow"
+                >
+                  Switch
+                </button>
+              </div>
+            </div>
           )}
 
           <button
@@ -244,6 +415,31 @@ export function ActiveSessionPage() {
             ◂ Done — back to overview
           </button>
         </div>
+
+        {methodEditor?.exercise.id === selectedExercise.id && (
+          <MethodEditorSheet
+            exercise={methodEditor.exercise}
+            method={methodEditor.method}
+            onSave={(input) => handleSaveMethod(methodEditor.exercise, methodEditor.method, input)}
+            onDelete={
+              methodEditor.method && !methodEditor.method.isSeeded
+                ? () => {
+                    deleteCustomMethod(selectedExercise.id, methodEditor.method!.id);
+                    refreshMethods();
+                  }
+                : undefined
+            }
+            onHide={
+              methodEditor.method?.isSeeded
+                ? () => {
+                    hideSeededMethod(selectedExercise.id, methodEditor.method!.id);
+                    refreshMethods();
+                  }
+                : undefined
+            }
+            onClose={() => setMethodEditor(null)}
+          />
+        )}
       </div>
     );
   }
@@ -272,16 +468,25 @@ export function ActiveSessionPage() {
           <span className="text-xs font-terminal text-matrix-green tabular-nums">{totalLogged}/{totalPlan}</span>
         </div>
 
-        {session.planExercises.map((ex) => (
-          <ExerciseOverviewRow
-            key={ex.id}
-            exercise={ex}
-            loggedSets={loggedMap.get(ex.name) ?? []}
-            lastWeekSets={lastWeekMap.get(ex.name) ?? []}
-            cueCount={getReminders(ex.name).length}
-            onOpen={() => setSelectedExerciseId(ex.id)}
-          />
-        ))}
+        {session.planExercises.map((ex) => {
+          const methods = getExerciseMethods(ex);
+          const selectedMethod = getSelectedMethod(ex);
+          const methodKey = logKey(ex.name, selectedMethod?.id ?? null);
+          return (
+            <ExerciseOverviewRow
+              key={ex.id}
+              exercise={ex}
+              methods={methods}
+              selectedMethod={selectedMethod}
+              onMethodSelect={(methodId) => requestMethodSwitch(ex, methodId)}
+              onAddMethod={() => setMethodEditor({ exercise: ex, method: null })}
+              loggedSets={loggedMap.get(methodKey) ?? []}
+              lastWeekSets={lastWeekMap.get(methodKey) ?? []}
+              cueCount={getReminders(ex.name).length}
+              onOpen={() => setSelectedExerciseId(ex.id)}
+            />
+          );
+        })}
 
         {adHocExercises.length > 0 && (
           <>
@@ -360,6 +565,59 @@ export function ActiveSessionPage() {
 
       {showAddModal && (
         <AddExerciseModal onAdd={handleAddAdHoc} onClose={() => setShowAddModal(false)} />
+      )}
+
+      {methodEditor && !selectedExercise && (
+        <MethodEditorSheet
+          exercise={methodEditor.exercise}
+          method={methodEditor.method}
+          onSave={(input) => handleSaveMethod(methodEditor.exercise, methodEditor.method, input)}
+          onDelete={
+            methodEditor.method && !methodEditor.method.isSeeded
+              ? () => {
+                  deleteCustomMethod(methodEditor.exercise.id, methodEditor.method!.id);
+                  refreshMethods();
+                }
+              : undefined
+          }
+          onHide={
+            methodEditor.method?.isSeeded
+              ? () => {
+                  hideSeededMethod(methodEditor.exercise.id, methodEditor.method!.id);
+                  refreshMethods();
+                }
+              : undefined
+          }
+          onClose={() => setMethodEditor(null)}
+        />
+      )}
+
+      {pendingMethodSwitch && !selectedExercise && (
+        <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setPendingMethodSwitch(null)} />
+          <div className="relative w-full max-w-sm mx-4 rounded-xl border border-matrix-yellow/40 bg-matrix-bg p-4 space-y-3" data-testid="method-switch-confirm">
+            <div className="text-xs font-terminal text-matrix-yellow text-center">
+              Switch method? Logged sets for the current method will be cleared.
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingMethodSwitch(null)}
+                className="flex-1 py-2 rounded border border-matrix-border font-terminal text-xs text-matrix-text-muted"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => confirmMethodSwitch()}
+                data-testid="confirm-method-switch"
+                className="flex-1 py-2 rounded bg-matrix-yellow/20 border border-matrix-yellow font-terminal text-xs text-matrix-yellow"
+              >
+                Switch
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

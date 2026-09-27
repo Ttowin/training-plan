@@ -23,6 +23,8 @@ const logExerciseSchema = z.object({
   exerciseId: z.number().int().positive().nullable().optional(),
   exerciseName: z.string().min(1, "Exercise name required"),
   inputRaw: z.string().min(1, "Shorthand input required"),
+  methodId: z.string().min(1).nullable().optional(),
+  methodLabel: z.string().min(1).nullable().optional(),
 });
 
 // List sessions
@@ -156,7 +158,7 @@ sessions.post(
   async (c) => {
     const db = c.env.DB;
     const sessionId = parseInt(c.req.param("id"));
-    const { exerciseId, exerciseName, inputRaw } = c.req.valid("json");
+    const { exerciseId, exerciseName, inputRaw, methodId, methodLabel } = c.req.valid("json");
 
     const sessionRow = await db
       .prepare(queries.getSessionById)
@@ -183,6 +185,8 @@ sessions.post(
         parsed.reps,
         parsed.sets,
         inputRaw,
+        methodId ?? null,
+        methodLabel ?? null,
         now
       )
       .first<Record<string, unknown>>();

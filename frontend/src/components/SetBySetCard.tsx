@@ -1,6 +1,13 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { MethodSelector } from "./MethodSelector.js";
 import { computeVolume } from "../utils/shorthandParser.js";
 import type { Exercise, SessionExercise } from "../types/index.js";
+import {
+  type ExerciseMethod,
+  defaultWeightForMode,
+  getWeightHelperText,
+  getWeightLabel,
+} from "../utils/parseSeedMethods.js";
 
 export interface SetInput {
   weight: number | null;
@@ -9,6 +16,11 @@ export interface SetInput {
 
 interface Props {
   exercise: Exercise;
+  methods: ExerciseMethod[];
+  selectedMethod: ExerciseMethod | null;
+  onMethodSelect: (methodId: string) => void;
+  onAddMethod: () => void;
+  onEditMethod: (method: ExerciseMethod) => void;
   /** Last session's sets for this exercise, expanded one entry per set. */
   lastWeekSets: SetInput[];
   /** Sets already logged for this exercise in the current session. */
@@ -30,8 +42,93 @@ function formatNum(n: number): string {
   return Number.isInteger(n) ? n.toString() : n.toFixed(1);
 }
 
+type EditingField = { rowId: number; field: "weight" | "reps" } | null;
+
+interface EditableSetValueProps {
+  display: string;
+  editing: boolean;
+  draft: string;
+  disabled?: boolean;
+  inputMode: "decimal" | "numeric";
+  testId: string;
+  ariaLabel: string;
+  widthClass?: string;
+  onStartEdit: () => void;
+  onDraftChange: (value: string) => void;
+  onCommit: () => void;
+  onCancel: () => void;
+}
+
+function EditableSetValue({
+  display,
+  editing,
+  draft,
+  disabled,
+  inputMode,
+  testId,
+  ariaLabel,
+  widthClass = "w-12",
+  onStartEdit,
+  onDraftChange,
+  onCommit,
+  onCancel,
+}: EditableSetValueProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [editing]);
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        type="text"
+        inputMode={inputMode}
+        value={draft}
+        disabled={disabled}
+        aria-label={ariaLabel}
+        data-testid={`${testId}-input`}
+        onChange={(e) => onDraftChange(e.target.value)}
+        onBlur={onCommit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            onCommit();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            onCancel();
+          }
+        }}
+        className={`${widthClass} min-h-[40px] text-center bg-matrix-bg border border-matrix-green rounded font-terminal text-base text-matrix-green tabular-nums focus:outline-none focus:ring-1 focus:ring-matrix-green`}
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      aria-label={ariaLabel}
+      data-testid={testId}
+      onClick={onStartEdit}
+      className={`${widthClass} min-h-[40px] text-center font-terminal text-base text-matrix-green tabular-nums rounded border border-transparent hover:border-matrix-green/40 transition-colors disabled:opacity-30`}
+    >
+      {display}
+    </button>
+  );
+}
+
 export function SetBySetCard({
   exercise,
+  methods,
+  selectedMethod,
+  onMethodSelect,
+  onAddMethod,
+  onEditMethod,
   lastWeekSets,
   loggedSets,
   reminders,
@@ -56,7 +153,8 @@ export function SetBySetCard({
       return lastWeekSets.map((s) => makeRow(s.weight, s.reps));
     }
     const n = exercise.default_sets && exercise.default_sets > 0 ? exercise.default_sets : 3;
-    return Array.from({ length: n }, () => makeRow(20, exercise.reps_max ?? exercise.reps_min ?? 12));
+    const fallbackWeight = defaultWeightForMode(selectedMethod?.weightMode ?? "stack");
+    return Array.from({ length: n }, () => makeRow(fallbackWeight, exercise.reps_max ?? exercise.reps_min ?? 12));
   });
 
   const [cues, setCues] = useState<string[]>(reminders);
@@ -65,8 +163,47 @@ export function SetBySetCard({
   const [newCue, setNewCue] = useState("");
   const [showCues, setShowCues] = useState<boolean>(reminders.length > 0);
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState<EditingField>(null);
+  const [draft, setDraft] = useState("");
 
   const round = (v: number) => Math.round(v * 100) / 100;
+
+  function parseWeightInput(raw: string): number {
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed.toLowerCase() === "bw") return 0;
+    const n = parseFloat(trimmed);
+    if (Number.isNaN(n) || n < 0) return 0;
+    return round(n);
+  }
+
+  function parseRepsInput(raw: string, fallback: number): number {
+    const n = parseInt(raw.trim(), 10);
+    if (Number.isNaN(n) || n < 1) return fallback;
+    return Math.min(99, n);
+  }
+
+  function startEditing(rowId: number, field: "weight" | "reps", initial: string) {
+    if (disabled) return;
+    setEditing({ rowId, field });
+    setDraft(initial);
+  }
+
+  function cancelEditing() {
+    setEditing(null);
+    setDraft("");
+  }
+
+  function commitWeight(rowId: number) {
+    const value = parseWeightInput(draft);
+    update(rowId, { weight: value });
+    cancelEditing();
+  }
+
+  function commitReps(rowId: number, fallback: number) {
+    const value = parseRepsInput(draft, fallback);
+    update(rowId, { reps: value });
+    cancelEditing();
+  }
 
   function update(id: number, patch: Partial<Row>) {
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
@@ -110,7 +247,7 @@ export function SetBySetCard({
   }
 
   async function handleLog() {
-    if (rows.length === 0 || saving) return;
+    if (rows.length === 0 || saving || (methods.length > 0 && !selectedMethod)) return;
     setSaving(true);
     try {
       await onLogSets(rows.map((r) => ({ weight: r.weight, reps: r.reps })));
@@ -136,6 +273,12 @@ export function SetBySetCard({
         : `${exercise.reps_min}-${exercise.reps_max}`
       : "?";
 
+  const weightMode = selectedMethod?.weightMode ?? "stack";
+  const weightLabel = getWeightLabel(weightMode);
+  const weightHelper = getWeightHelperText(weightMode);
+  const isBodyweight = weightMode === "bodyweight";
+  const canLog = rows.length > 0 && (methods.length === 0 || !!selectedMethod);
+
   return (
     <div
       className={`border rounded-lg overflow-hidden ${
@@ -157,7 +300,8 @@ export function SetBySetCard({
             </span>
           </div>
           <div className="text-xs text-matrix-text-muted font-terminal mt-0.5">
-            target {repsLabel} reps{exercise.equipment ? ` · ${exercise.equipment}` : ""}
+            target {repsLabel} reps
+            {selectedMethod ? ` · ${selectedMethod.label}` : exercise.equipment ? ` · ${exercise.equipment}` : ""}
           </div>
         </div>
         {isLogged && (
@@ -172,6 +316,20 @@ export function SetBySetCard({
             </div>
             <div className="text-matrix-text-muted text-xs font-terminal">vol {loggedVolume.toFixed(0)}</div>
           </div>
+        )}
+      </div>
+
+      <div className="px-4 pb-3">
+        <MethodSelector
+          methods={methods}
+          selectedId={selectedMethod?.id ?? null}
+          onSelect={onMethodSelect}
+          onAdd={onAddMethod}
+          onEdit={onEditMethod}
+          disabled={disabled}
+        />
+        {selectedMethod?.notes && (
+          <div className="mt-2 text-[11px] font-terminal text-matrix-cyan/80">{selectedMethod.notes}</div>
         )}
       </div>
 
@@ -261,11 +419,16 @@ export function SetBySetCard({
       <div className="px-4 pb-1">
         {lastWeekSets.length > 0 ? (
           <div className="text-xs font-terminal text-matrix-text-muted border-l border-matrix-border pl-2" data-testid={`last-week-ref-${exercise.id}`}>
-            Last: {lastWeekSets.map((s) => `${s.weight == null ? "BW" : formatNum(s.weight)}×${s.reps}`).join(", ")}
+            Last{selectedMethod ? ` (${selectedMethod.label})` : ""}:{" "}
+            {lastWeekSets.map((s) => `${s.weight == null ? "BW" : formatNum(s.weight)}×${s.reps}`).join(", ")}
             {lastVolume > 0 && ` · vol ${lastVolume.toFixed(0)}`}
           </div>
         ) : (
-          <div className="text-xs font-terminal text-matrix-text-muted opacity-50">No previous data — starting fresh</div>
+          <div className="text-xs font-terminal text-matrix-text-muted opacity-50">
+            {selectedMethod
+              ? `No previous data for ${selectedMethod.label} — starting fresh`
+              : "No previous data — starting fresh"}
+          </div>
         )}
       </div>
 
@@ -273,37 +436,60 @@ export function SetBySetCard({
       <div className="px-4 pb-4 pt-2 border-t border-matrix-border mt-2 space-y-2">
         <div className="flex items-center gap-2 text-[10px] font-terminal text-matrix-text-muted uppercase tracking-widest">
           <span className="w-6">Set</span>
-          <span className="flex-1 text-center">Weight (kg)</span>
+          <span className="flex-1 text-center">{isBodyweight ? "Mode" : weightLabel}</span>
           <span className="flex-1 text-center">Reps</span>
           <span className="w-6" />
         </div>
+        {weightHelper && (
+          <div className="text-[10px] font-terminal text-matrix-text-muted">{weightHelper}</div>
+        )}
 
         {rows.map((r, i) => (
           <div key={r.id} className="flex items-center gap-2" data-testid={`set-row-${exercise.id}-${i}`}>
             <span className="w-6 text-center font-terminal text-sm text-matrix-text-muted tabular-nums">{i + 1}</span>
 
-            <div className="flex-1 flex items-center justify-center gap-1">
-              <button
-                type="button"
-                aria-label={`set ${i + 1} decrease weight`}
-                disabled={disabled}
-                onClick={() => update(r.id, { weight: r.weight == null ? 0 : round(Math.max(0, r.weight - 2.5)) })}
-                className="w-10 h-10 rounded border border-matrix-border text-matrix-green font-terminal text-lg hover:border-matrix-green transition-colors disabled:opacity-30"
-              >
-                −
-              </button>
-              <span className="w-12 text-center font-terminal text-base text-matrix-green tabular-nums" data-testid={`set-row-${exercise.id}-${i}-weight`}>
-                {r.weight == null ? "BW" : formatNum(r.weight)}
-              </span>
-              <button
-                type="button"
-                aria-label={`set ${i + 1} increase weight`}
-                disabled={disabled}
-                onClick={() => update(r.id, { weight: round((r.weight ?? 0) + 2.5) })}
-                className="w-10 h-10 rounded border border-matrix-border text-matrix-green font-terminal text-lg hover:border-matrix-green transition-colors disabled:opacity-30"
-              >
-                +
-              </button>
+            <div className={`flex-1 flex items-center justify-center gap-1 ${isBodyweight ? "opacity-80" : ""}`}>
+              {isBodyweight ? (
+                <span className="w-12 text-center font-terminal text-base text-matrix-green tabular-nums" data-testid={`set-row-${exercise.id}-${i}-weight`}>
+                  BW
+                </span>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    aria-label={`set ${i + 1} decrease weight`}
+                    disabled={disabled}
+                    onClick={() => update(r.id, { weight: r.weight == null ? 0 : round(Math.max(0, r.weight - 2.5)) })}
+                    className="w-10 h-10 rounded border border-matrix-border text-matrix-green font-terminal text-lg hover:border-matrix-green transition-colors disabled:opacity-30"
+                  >
+                    −
+                  </button>
+                  <EditableSetValue
+                    display={r.weight == null ? "BW" : formatNum(r.weight)}
+                    editing={editing?.rowId === r.id && editing.field === "weight"}
+                    draft={draft}
+                    disabled={disabled}
+                    inputMode="decimal"
+                    testId={`set-row-${exercise.id}-${i}-weight`}
+                    ariaLabel={`set ${i + 1} weight in kg`}
+                    onStartEdit={() =>
+                      startEditing(r.id, "weight", r.weight == null ? "" : formatNum(r.weight))
+                    }
+                    onDraftChange={setDraft}
+                    onCommit={() => commitWeight(r.id)}
+                    onCancel={cancelEditing}
+                  />
+                  <button
+                    type="button"
+                    aria-label={`set ${i + 1} increase weight`}
+                    disabled={disabled}
+                    onClick={() => update(r.id, { weight: round((r.weight ?? 0) + 2.5) })}
+                    className="w-10 h-10 rounded border border-matrix-border text-matrix-green font-terminal text-lg hover:border-matrix-green transition-colors disabled:opacity-30"
+                  >
+                    +
+                  </button>
+                </>
+              )}
             </div>
 
             <div className="flex-1 flex items-center justify-center gap-1">
@@ -316,9 +502,20 @@ export function SetBySetCard({
               >
                 −
               </button>
-              <span className="w-8 text-center font-terminal text-base text-matrix-green tabular-nums" data-testid={`set-row-${exercise.id}-${i}-reps`}>
-                {r.reps}
-              </span>
+              <EditableSetValue
+                display={String(r.reps)}
+                editing={editing?.rowId === r.id && editing.field === "reps"}
+                draft={draft}
+                disabled={disabled}
+                inputMode="numeric"
+                testId={`set-row-${exercise.id}-${i}-reps`}
+                ariaLabel={`set ${i + 1} reps`}
+                widthClass="w-8"
+                onStartEdit={() => startEditing(r.id, "reps", String(r.reps))}
+                onDraftChange={setDraft}
+                onCommit={() => commitReps(r.id, r.reps)}
+                onCancel={cancelEditing}
+              />
               <button
                 type="button"
                 aria-label={`set ${i + 1} increase reps`}
@@ -362,7 +559,7 @@ export function SetBySetCard({
         <button
           type="button"
           onClick={handleLog}
-          disabled={disabled || saving || rows.length === 0}
+          disabled={disabled || saving || !canLog}
           data-testid={`log-sets-${exercise.id}`}
           className="w-full min-h-[48px] py-3 rounded-xl bg-matrix-green text-matrix-bg font-terminal text-sm tracking-[0.15em] uppercase shadow-matrix-sm hover:bg-matrix-green-dim transition-colors disabled:opacity-40"
         >
