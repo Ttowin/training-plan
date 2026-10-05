@@ -79,11 +79,6 @@ export function ActiveSessionPage() {
     onSuccess: invalidateSessionData,
   });
 
-  const deleteExercise = useMutation({
-    mutationFn: (exId: number) => api.deleteExercise(sessionId, exId),
-    onSuccess: invalidateSessionData,
-  });
-
   const logSets = useMutation({
     mutationFn: async ({
       exercise,
