@@ -109,8 +109,11 @@ test.describe("Full training day workflow — Chest & Shoulder Day", () => {
     // Submit
     await modal.getByTestId("add-exercise-submit").click();
 
-    // Ad-hoc exercise should appear in session
-    await expect(page.getByText("Cable Crossover")).toBeVisible({ timeout: 3000 });
+    // Ad-hoc exercise appears in the same overview list as plan exercises
+    const adHocRow = page.locator('button[data-testid^="exercise-overview-"]', {
+      hasText: "Cable Crossover",
+    });
+    await expect(adHocRow).toBeVisible({ timeout: 3000 });
   });
 
   test("User completes session via confirmation flow", async ({ page }) => {

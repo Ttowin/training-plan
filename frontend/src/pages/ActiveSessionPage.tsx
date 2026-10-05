@@ -20,6 +20,7 @@ import {
   updateMethod,
 } from "../data/exerciseMethods.js";
 import { logKey, type ExerciseMethod, type WeightMode } from "../utils/parseSeedMethods.js";
+import { getSessionExercises, sessionExerciseIdForApi } from "../utils/adHocExercises.js";
 import type { Exercise, ParsedShorthand, SessionExercise } from "../types/index.js";
 
 export function ActiveSessionPage() {
@@ -104,7 +105,7 @@ export function ActiveSessionPage() {
       for (const s of sets) {
         const inputRaw = s.weight === null ? `bwx${s.reps}` : `${s.weight}x${s.reps}`;
         await api.logExercise(sessionId, {
-          exerciseId: exercise.id,
+          exerciseId: sessionExerciseIdForApi(exercise),
           exerciseName: exercise.name,
           inputRaw,
           methodId: method?.id ?? null,
@@ -155,9 +156,10 @@ export function ActiveSessionPage() {
     if (!session) return;
     setMethodSelections((prev) => {
       const next = { ...prev };
-      for (const ex of session.planExercises) {
+      const exercises = getSessionExercises(session);
+      for (const ex of exercises) {
         if (next[ex.id]) continue;
-        const loggedForExercise = session.exercises.filter((e) => e.exercise_id === ex.id);
+        const loggedForExercise = session.exercises.filter((e) => e.exercise_name === ex.name);
         const methodFromLog = loggedForExercise.find((e) => e.method_id)?.method_id;
         const defaultId = methodFromLog ?? getDefaultMethodId(ex);
         if (defaultId) next[ex.id] = defaultId;
@@ -201,7 +203,7 @@ export function ActiveSessionPage() {
 
   async function confirmMethodSwitch() {
     if (!pendingMethodSwitch || !session) return;
-    const exercise = session.planExercises.find((e) => e.id === pendingMethodSwitch.exerciseId);
+    const exercise = getSessionExercises(session).find((e) => e.id === pendingMethodSwitch.exerciseId);
     if (!exercise) return;
 
     const currentMethod = getSelectedMethod(exercise);
@@ -275,17 +277,16 @@ export function ActiveSessionPage() {
     );
   }
 
-  const planNames = new Set(session.planExercises.map((e) => e.name));
-  const adHocExercises = session.exercises.filter((e) => !planNames.has(e.exercise_name));
+  const sessionExercises = getSessionExercises(session);
 
-  const totalLogged = session.planExercises.filter((e) => {
+  const totalLogged = sessionExercises.filter((e) => {
     const method = getSelectedMethod(e);
     return (loggedMap.get(logKey(e.name, method?.id ?? null))?.length ?? 0) > 0;
   }).length;
-  const totalPlan = session.planExercises.length;
+  const totalPlan = sessionExercises.length;
 
   const selectedExercise = selectedExerciseId
-    ? session.planExercises.find((e) => e.id === selectedExerciseId) ?? null
+    ? sessionExercises.find((e) => e.id === selectedExerciseId) ?? null
     : null;
 
   const overviewSubtitle = isCompleted
@@ -468,7 +469,7 @@ export function ActiveSessionPage() {
           <span className="text-xs font-terminal text-matrix-green tabular-nums">{totalLogged}/{totalPlan}</span>
         </div>
 
-        {session.planExercises.map((ex) => {
+        {sessionExercises.map((ex) => {
           const methods = getExerciseMethods(ex);
           const selectedMethod = getSelectedMethod(ex);
           const methodKey = logKey(ex.name, selectedMethod?.id ?? null);
@@ -488,41 +489,13 @@ export function ActiveSessionPage() {
           );
         })}
 
-        {adHocExercises.length > 0 && (
-          <>
-            <div className="text-xs font-terminal text-matrix-text-muted uppercase tracking-widest pt-3">
-              EXTRA EXERCISES
-            </div>
-            {adHocExercises.map((ex) => (
-              <div
-                key={ex.id}
-                className="border border-matrix-cyan/30 rounded-lg p-3 bg-matrix-bg-card"
-                data-testid={`adhoc-exercise-${ex.id}`}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-xs font-terminal text-matrix-cyan">{ex.exercise_name}</div>
-                    <div className="text-xs font-terminal text-matrix-text-muted">{ex.input_raw}</div>
-                  </div>
-                  <button
-                    onClick={() => deleteExercise.mutate(ex.id)}
-                    className="text-xs text-matrix-red font-terminal"
-                  >
-                    ✕
-                  </button>
-                </div>
-              </div>
-            ))}
-          </>
-        )}
-
         {!isCompleted && (
           <button
             onClick={() => setShowAddModal(true)}
             data-testid="add-exercise-button"
             className="w-full py-3 mt-2 border border-dashed border-matrix-border rounded-lg font-terminal text-xs text-matrix-text-muted hover:border-matrix-green hover:text-matrix-green transition-colors uppercase tracking-widest"
           >
-            ⊕ ADD EXTRA EXERCISE
+            ⊕ ADD EXERCISE
           </button>
         )}
 
