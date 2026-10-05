@@ -93,27 +93,38 @@ test.describe("Full training day workflow — Chest & Shoulder Day", () => {
     await page.getByTestId("start-session-button").click();
     await page.waitForURL(/\/session\/\d+/);
 
-    await expect(page.getByTestId("add-exercise-button")).toBeVisible();
+    await expect(page.getByText("EXTRA EXERCISES")).toHaveCount(0);
+
+    await expect(page.getByTestId("add-exercise-button")).toHaveText(/ADD EXERCISE/);
     await page.getByTestId("add-exercise-button").click();
 
-    // Modal should appear
     const modal = page.getByTestId("add-exercise-modal");
     await expect(modal).toBeVisible();
 
-    // Fill exercise name
     await modal.getByTestId("add-exercise-name-input").fill("Cable Crossover");
-
-    // Fill shorthand (scoped to modal to avoid matching exercise card inputs)
     await modal.getByTestId("shorthand-input").fill("12x15x3");
-
-    // Submit
     await modal.getByTestId("add-exercise-submit").click();
 
-    // Ad-hoc exercise appears in the same overview list as plan exercises
+    await expect(modal).toBeHidden({ timeout: 5000 });
+
     const adHocRow = page.locator('button[data-testid^="exercise-overview-"]', {
       hasText: "Cable Crossover",
     });
-    await expect(adHocRow).toBeVisible({ timeout: 3000 });
+    await expect(adHocRow).toBeVisible({ timeout: 5000 });
+    await expect(adHocRow).toContainText("set");
+
+    const planCountBefore = 5;
+    await expect(page.locator('button[data-testid^="exercise-overview-"]')).toHaveCount(
+      planCountBefore + 1
+    );
+
+    await adHocRow.click();
+    const card = page.locator('[data-testid^="exercise-card-"]');
+    await expect(card).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("span.uppercase.font-bold", { hasText: "Cable Crossover" })).toBeVisible();
+
+    await page.getByTestId("overview-back").click();
+    await expect(adHocRow).toBeVisible();
   });
 
   test("User completes session via confirmation flow", async ({ page }) => {
