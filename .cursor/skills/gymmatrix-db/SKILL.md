@@ -1,15 +1,17 @@
 ---
 name: gymmatrix-db
 description: >
-  Query, insert, update, and analyze GymMatrix workout records in the local
-  D1 database the running app uses. Use when asked to look up sessions,
+  Query, insert, update, and analyze GymMatrix workout records in the hosted
+  Cloudflare D1 database gymmatrix-db. Use when asked to look up sessions,
   exercises, sets, volume, or progression, to log or edit training data, or
-  to reason about the records currently stored by the app.
+  to reason about the records the deployed Worker is serving.
 ---
 
-# GymMatrix local database
+# GymMatrix Cloudflare D1
 
-The running app (`npm run dev --workspace=backend`, Wrangler on port 8787) stores its records in the local Cloudflare D1 SQLite file under `backend/.wrangler/state/v3/d1`. Query and change that file with `db:sql`. The command finds the file itself, including while the worker has it open, so the rows you read are the rows the app is serving and a committed write shows up in the app immediately.
+The deployed Worker, https://gymmatrix.cchunyungg123.workers.dev, stores its records in Cloudflare D1 database `gymmatrix-db` (`database_id` in `backend/wrangler.toml`). Query and change that hosted database with `db:sql`. The command calls the Cloudflare D1 HTTP API (`/accounts/{account_id}/d1/database/{database_id}/query`). A committed write is what the hosted app serves.
+
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` must already be in the environment. They are the same names the Deploy to Cloudflare workflow uses. The command reads them from the environment. Never print the token, put it in a command argument, or write it into a file.
 
 Run it from the repo root:
 
@@ -27,23 +29,21 @@ npm run db:sql --workspace=backend -- --write --params '[1,"2026-11-08","2026-11
 
 - `ok` — whether the statement ran
 - `mode` — `read` or `write`
-- `database` — repo-relative file that was opened. It should sit under `backend/.wrangler/state/v3/d1`
+- `host` — `cloudflare-d1`
+- `database` — `gymmatrix-db`
+- `databaseId` — the D1 id from `backend/wrangler.toml`
 - `rows` — result rows. `INSERT`/`UPDATE`/`DELETE` include rows only when the statement says `RETURNING`
 - `changes` — rows written
 - `lastInsertRowid` — new row id after an insert
-- `alsoFound` — other sqlite files in that directory. The command opens the one most recently touched (the file the worker is using). If `alsoFound` is non-empty, say which file you opened
 
-A non-zero exit means `ok` is false and `error` explains why. The statement was not applied.
+A non-zero exit means `ok` is false and `error` explains why. The statement was not applied. If `error` says the Cloudflare credentials are required, stop. Ask for `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` to be added to the cloud agent environment. Do not query `backend/.wrangler` and present those rows as the hosted data. That directory is the local Wrangler simulator, a different database from D1.
 
 ## Rules
 
 - One statement per call. Put values in `--params`, so names and notes cannot change the statement.
 - Reads need no flag. `INSERT`, `UPDATE`, and `DELETE` need `--write`.
-- The tool rejects `DROP`, `ALTER`, `CREATE`, and other schema statements. Schema changes belong in `backend/src/db/migrations/` and `schema.sql`, then the app's migrate scripts.
-- Leave `backend/.wrangler` in place. Deleting it destroys the workouts the app is using. `db:seed:local` only inserts missing seed rows; it is not a reload.
-- This environment's install recreates that directory from the seed when a new VM is built. Records added after that live in the local file for this environment. A new environment starts from the seed again.
-- The dev server's working directory is `backend/`. Start it with `npm run dev --workspace=backend` so it uses this same directory. `db:sql` always opens `backend/.wrangler/state`, whatever the shell's current directory is.
-- Confirm a write by selecting the row back. When the worker is up, `GET http://127.0.0.1:8787/api/sessions` and `GET http://127.0.0.1:8787/api/training-days` read this same database.
+- The tool rejects `DROP`, `ALTER`, `CREATE`, and other schema statements. Schema changes belong in `backend/src/db/migrations/` and `schema.sql`, then `npm run db:migrate:remote --workspace=backend`.
+- Confirm a write by selecting the row back. The hosted app reads this same D1 database: `GET https://gymmatrix.cchunyungg123.workers.dev/api/sessions` and `GET https://gymmatrix.cchunyungg123.workers.dev/api/training-days`.
 - `session_date` is a calendar date `YYYY-MM-DD`. When the user says today, use the date in Asia/Hong_Kong. `started_at` and `logged_at` are UTC ISO-8601 timestamps, the same form `new Date().toISOString()` writes.
 - Deleting a session also deletes its `session_exercises` rows. Deleting a training day also deletes its plan exercises.
 
