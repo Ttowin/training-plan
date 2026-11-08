@@ -4,14 +4,47 @@ description: >
   Query, insert, update, and analyze GymMatrix workout records in the hosted
   Cloudflare D1 database gymmatrix-db. Use when asked to look up sessions,
   exercises, sets, volume, or progression, to log or edit training data, or
-  to reason about the records the deployed Worker is serving.
+  to reason about the records the deployed Worker is serving. Prefer the
+  Cloudflare API MCP tools search, execute, and whoami when they are connected.
 ---
 
 # GymMatrix Cloudflare D1
 
-The deployed Worker, https://gymmatrix.cchunyungg123.workers.dev, stores its records in Cloudflare D1 database `gymmatrix-db` (`database_id` in `backend/wrangler.toml`). Query and change that hosted database with `db:sql`. The command calls the Cloudflare D1 HTTP API (`/accounts/{account_id}/d1/database/{database_id}/query`). A committed write is what the hosted app serves.
+The deployed Worker, https://gymmatrix.cchunyungg123.workers.dev, stores its records in Cloudflare D1 database `gymmatrix-db` (`database_id` in `backend/wrangler.toml`). A committed write is what the hosted app serves.
 
-`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` must already be in the environment. They are the same names the Deploy to Cloudflare workflow uses. The command reads them from the environment. Never print the token, put it in a command argument, or write it into a file.
+## Cloudflare API MCP
+
+Use the connected Cloudflare API MCP server (`https://mcp.cloudflare.com/mcp`, configured in `.cursor/mcp.json` as `cloudflare-api`) before any local command. Its tools are `whoami`, `search`, `execute`, and `docs`. Code Mode keeps the OpenAPI spec on the server: `search` finds the endpoint, `execute` calls it.
+
+1. Call `whoami`. A user login returns `{ id, email }`. An account token returns `{ id, name }` with `id` shaped like `account: <account id>`.
+2. `search` for the D1 query route, `POST /accounts/{account_id}/d1/database/{database_id}/query`.
+3. `execute` that route. The database id is `1f2eaa61-d59c-4060-9b09-c8f7ffb2a6eb`. Pass SQL in the JSON body as `sql` and bound values as `params`. For a user OAuth login, pass `account_id` into `execute`. An account token fills the account id in itself.
+
+```javascript
+async () => {
+  const response = await cloudflare.request({
+    method: "POST",
+    path: `/accounts/${accountId}/d1/database/1f2eaa61-d59c-4060-9b09-c8f7ffb2a6eb/query`,
+    body: {
+      sql: "SELECT id, name, order_idx FROM training_days ORDER BY order_idx",
+      params: []
+    }
+  });
+  return response.result;
+}
+```
+
+Reads need the `d1.read` scope. Inserts, updates, and deletes need `d1.write`. If the tool result says a scope is missing, stop and ask the user to re-authorize so that scope is added. One statement per call. Bind values in `params`. Do not send `DROP`, `ALTER`, or `CREATE` through this path.
+
+The server answers `401` until someone signs in. Signing in is a Cloudflare OAuth redirect. For a Cloud Agent, add an HTTP MCP server named `cloudflare-api` with URL `https://mcp.cloudflare.com/mcp` from the MCP list at cursor.com/agents, then choose Authorize and grant D1 read and D1 write. Cursor's redirect URL is `https://www.cursor.com/agents/mcp/oauth/callback`. Desktop Cursor uses the same URL from `.cursor/mcp.json` and redirects through `http://localhost:8787/callback`. A new agent run picks up the connection. This run does not.
+
+The other login is a Cloudflare API token sent as `Authorization: Bearer <token>` on that same MCP server. Create it in the Cloudflare dashboard with D1 Read, D1 Edit, and Account Settings Read (account tokens need Account Resources Read so the server can see the account). Do not paste the token into chat, commit it, or put it in `.cursor/mcp.json`. Add it only as the MCP server's Authorization header where Cursor stores MCP headers. Tokens with client IP filtering do not work against this server.
+
+When `whoami`, `search`, and `execute` are absent, the MCP server is not connected. Say that and stop, unless `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are already in the environment. In that case use `db:sql` below. Do not query `backend/.wrangler` and present those rows as the hosted data. That directory is the local Wrangler simulator.
+
+## Direct D1 API
+
+`db:sql` calls the same D1 query endpoint when the MCP tools are not connected and both environment variables are set. It reads them from the environment. Never print the token, put it in a command argument, or write it into a file.
 
 Run it from the repo root:
 
