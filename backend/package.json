@@ -12,6 +12,7 @@
     "db:dedupe:local": "wrangler d1 execute gymmatrix-db --local --file=src/db/migrations/002_dedupe_exercises.sql",
     "db:migrate:local": "wrangler d1 execute gymmatrix-db --local --file=src/db/schema.sql && npm run db:dedupe:local",
     "db:seed:local": "wrangler d1 execute gymmatrix-db --local --file=src/db/seed.sql",
+    "db:sql": "node --disable-warning=ExperimentalWarning scripts/d1-sql.mjs",
     "db:upgrade:method-columns:local": "wrangler d1 execute gymmatrix-db --local --file=src/db/migrations/003_add_method_columns.sql || true",
     "db:dedupe:remote": "wrangler d1 execute gymmatrix-db --remote --file=src/db/migrations/002_dedupe_exercises.sql",
     "db:migrate:remote": "wrangler d1 execute gymmatrix-db --remote --file=src/db/schema.sql && npm run db:dedupe:remote",
